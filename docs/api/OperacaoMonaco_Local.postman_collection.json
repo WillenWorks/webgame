@@ -1,0 +1,148 @@
+{
+  "info": {
+    "_postman_id": "b6e2f6f8-0000-0000-0000-000000000000",
+    "name": "Operacao Monaco – Local",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection básica para testar o backend local da Operação Monaco."
+  },
+  "item": [
+    {
+      "name": "Healthcheck",
+      "item": [
+        {
+          "name": "GET /ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ping",
+              "host": ["{{baseUrl}}"],
+              "path": ["ping"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dados estáticos",
+      "item": [
+        {
+          "name": "GET /api/case",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/case",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "case"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/cities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/cities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "cities"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/suspect",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/suspect",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "suspect"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gameplay",
+      "item": [
+        {
+          "name": "GET /api/game/start",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/game/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "game", "start"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/game/investigate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/game/investigate?step=0&clueIndex=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "game", "investigate"],
+              "query": [
+                { "key": "step", "value": "0" },
+                { "key": "clueIndex", "value": "0" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/game/connections",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/game/connections?step=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "game", "connections"],
+              "query": [
+                { "key": "step", "value": "0" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/game/travel",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"step\": 0,\n  \"chosenCityId\": \"paris\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/game/travel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "game", "travel"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3333"
+    }
+  ]
+}
