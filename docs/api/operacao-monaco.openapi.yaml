@@ -1,0 +1,350 @@
+openapi: 3.0.3
+info:
+  title: Operação Monaco API
+  description: |
+    API do jogo investigativo Operação Monaco (MVP).
+    Fornece dados estáticos do caso piloto e endpoints de gameplay
+    para o loop básico de investigação.
+  version: 0.1.0
+  contact:
+    name: Willen Works
+    url: https://github.com/WillenWorks
+servers:
+  - url: http://localhost:3333
+    description: Ambiente local de desenvolvimento
+  - url: https://api.operacao-monaco.dev
+    description: Ambiente futuro (placeholder)
+
+paths:
+  /ping:
+    get:
+      summary: Teste simples de disponibilidade
+      tags: [Healthcheck]
+      responses:
+        "200":
+          description: Backend ativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: pong - backend Operação Monaco ativo
+
+  /api/case:
+    get:
+      summary: Obter dados do caso piloto
+      tags: [Dados estáticos]
+      responses:
+        "200":
+          description: Dados do caso atual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+
+  /api/cities:
+    get:
+      summary: Listar cidades cadastradas
+      tags: [Dados estáticos]
+      responses:
+        "200":
+          description: Lista de cidades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/City"
+
+  /api/suspect:
+    get:
+      summary: Obter informações do suspeito principal
+      tags: [Dados estáticos]
+      responses:
+        "200":
+          description: Dados do suspeito
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Suspect"
+
+  /api/game/start:
+    get:
+      summary: Iniciar caso e retornar estado inicial do jogo
+      tags: [Gameplay]
+      responses:
+        "200":
+          description: Estado inicial do caso e cidade atual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameStartResponse"
+
+  /api/game/investigate:
+    get:
+      summary: Obter próxima pista na etapa atual
+      tags: [Gameplay]
+      parameters:
+        - in: query
+          name: step
+          schema:
+            type: integer
+            minimum: 0
+            example: 0
+          required: true
+          description: Índice da etapa atual da rota (0 = primeira perna)
+        - in: query
+          name: clueIndex
+          schema:
+            type: integer
+            minimum: 0
+            example: 0
+          required: true
+          description: Índice da pista já exibida (0 = primeira)
+      responses:
+        "200":
+          description: Pista retornada com o próximo índice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvestigateResponse"
+        "400":
+          description: Etapa inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/game/connections:
+    get:
+      summary: Listar cidades candidatas para a próxima viagem
+      tags: [Gameplay]
+      parameters:
+        - in: query
+          name: step
+          schema:
+            type: integer
+            minimum: 0
+            example: 0
+          required: true
+          description: Índice da etapa atual da rota
+      responses:
+        "200":
+          description: Opções de cidades para a próxima etapa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionsResponse"
+        "400":
+          description: Etapa inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Erro ao localizar cidade de destino
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/game/travel:
+    post:
+      summary: Enviar escolha de cidade e verificar se está correta
+      tags: [Gameplay]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TravelRequest"
+      responses:
+        "200":
+          description: Resultado da tentativa de viagem
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TravelResponse"
+        "400":
+          description: Etapa inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    Case:
+      type: object
+      properties:
+        caseId:
+          type: string
+          example: case_001
+        title:
+          type: string
+          example: O Roubo do Meridiano Zero
+        description:
+          type: string
+        route:
+          type: array
+          description: Lista de IDs de cidades na ordem da rota
+          items:
+            type: string
+            example: london
+
+    City:
+      type: object
+      properties:
+        cityId:
+          type: string
+          example: london
+        name:
+          type: string
+          example: Londres
+        country:
+          type: string
+          example: Reino Unido
+        landmarks:
+          type: array
+          items:
+            type: string
+          example:
+            - Big Ben
+            - London Eye
+            - Rio Tâmisa
+
+    Suspect:
+      type: object
+      properties:
+        suspectId:
+          type: string
+          example: suspect_carlos_monaco
+        name:
+          type: string
+          example: Carlos "Monaco" Navarro
+        description:
+          type: string
+        traits:
+          type: object
+          properties:
+            height:
+              type: string
+              example: alto
+            hair:
+              type: string
+              example: castanho escuro
+            style:
+              type: string
+              example: terno elegante e relógio de bolso
+            languages:
+              type: array
+              items:
+                type: string
+              example:
+                - Inglês
+                - Francês
+                - Italiano
+            signature:
+              type: string
+              example: Sempre deixa pistas relacionadas a tempo e fronteiras.
+
+    GameStartResponse:
+      type: object
+      properties:
+        case:
+          $ref: "#/components/schemas/Case"
+        step:
+          type: integer
+          example: 0
+        totalSteps:
+          type: integer
+          description: Total de etapas (pernas) da rota
+          example: 4
+        currentCity:
+          $ref: "#/components/schemas/City"
+        firstClue:
+          type: string
+          nullable: true
+          example: O suspeito comentou sobre uma torre de ferro próxima a um rio famoso.
+        clueIndex:
+          type: integer
+          example: 0
+
+    InvestigateResponse:
+      type: object
+      properties:
+        hasMore:
+          type: boolean
+          description: Indica se ainda há pistas adicionais nesta etapa
+          example: true
+        clueIndex:
+          type: integer
+          example: 1
+        clue:
+          type: string
+          example: Foi visto com um guia de museu que abriga uma certa Mona Lisa.
+
+    ConnectionsResponse:
+      type: object
+      properties:
+        step:
+          type: integer
+          example: 0
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              cityId:
+                type: string
+                example: paris
+              name:
+                type: string
+                example: Paris
+              country:
+                type: string
+                example: França
+
+    TravelRequest:
+      type: object
+      required:
+        - step
+        - chosenCityId
+      properties:
+        step:
+          type: integer
+          example: 0
+        chosenCityId:
+          type: string
+          example: paris
+
+    TravelResponse:
+      type: object
+      properties:
+        correct:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Boa dedução. O suspeito passou por aqui e já seguiu viagem.
+        nextStep:
+          type: integer
+          description: Próxima etapa da rota, se houver
+          example: 1
+        isLast:
+          type: boolean
+          description: Indica se esta é a última etapa antes do confronto final
+          example: false
+        nextCity:
+          allOf:
+            - $ref: "#/components/schemas/City"
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Etapa inválida
