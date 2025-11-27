@@ -19,12 +19,8 @@
         <template v-else>
           <!-- Linha superior: resumo do caso -->
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <InfoSectionCard
-              class="lg:col-span-2"
-              title="Caso em andamento"
-              subtitle="Dossiê ativo na unidade Europa"
-              badge="Treinamento IGI"
-            >
+            <InfoSectionCard class="lg:col-span-2" title="Caso em andamento" subtitle="Dossiê ativo na unidade Europa"
+              badge="Treinamento IGI">
               <p class="text-base font-semibold">
                 {{ caseData?.title }}
               </p>
@@ -39,11 +35,7 @@
               </p>
             </InfoSectionCard>
 
-            <InfoSectionCard
-              title="Status do Agente"
-              subtitle="Perfil de treinamento"
-              badge="Nível 1"
-            >
+            <InfoSectionCard title="Status do Agente" subtitle="Perfil de treinamento" badge="Nível 1">
               <p class="text-sm">
                 Cargo atual:
                 <span class="font-semibold text-emerald-300">
@@ -61,17 +53,10 @@
 
           <!-- Linha inferior: cidades e suspeito -->
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <InfoSectionCard
-              class="lg:col-span-2"
-              title="Rota investigada"
-              subtitle="Cidades identificadas na rota de fuga"
-            >
+            <InfoSectionCard class="lg:col-span-2" title="Rota investigada"
+              subtitle="Cidades identificadas na rota de fuga">
               <ul class="text-sm space-y-1">
-                <li
-                  v-for="(city, index) in cities"
-                  :key="city.cityId"
-                  class="flex items-start gap-2"
-                >
+                <li v-for="(city, index) in cities" :key="city.cityId" class="flex items-start gap-2">
                   <span class="text-xs text-slate-500 w-5">
                     {{ index + 1 }}.
                   </span>
@@ -91,10 +76,7 @@
               </ul>
             </InfoSectionCard>
 
-            <InfoSectionCard
-              title="Perfil do suspeito"
-              subtitle="Carlos “Monaco” Navarro"
-            >
+            <InfoSectionCard title="Perfil do suspeito" subtitle="Carlos “Monaco” Navarro">
               <p class="text-sm font-semibold mb-1">
                 {{ suspect?.name }}
               </p>
@@ -125,13 +107,33 @@
               </div>
             </InfoSectionCard>
           </div>
+
+          <!-- Bloco de chamada para o modo investigação -->
+          <section
+            class="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-slate-700/70 bg-slate-900/70 px-6 py-4">
+            <div>
+              <h2 class="text-lg font-semibold text-sky-300">
+                Modo Investigação
+              </h2>
+              <p class="text-sm text-slate-300">
+                Inicie a simulação do caso piloto e jogue como Analista Cadete da
+                IGI.
+              </p>
+            </div>
+            <NuxtLink to="/investigacao"
+              class="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-400 transition-colors">
+              Iniciar investigação
+              <span class="text-base">▶</span>
+            </NuxtLink>
+          </section>
         </template>
       </div>
     </main>
 
     <!-- Rodapé simples -->
     <footer class="border-t border-slate-800 bg-slate-950/90">
-      <div class="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+      <div
+        class="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
         <p class="text-[11px] text-slate-500">
           IGI · Sistema de Treinamento Operação Monaco · MVP
         </p>

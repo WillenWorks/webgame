@@ -21,19 +21,84 @@ export async function apiGet(endpoint) {
   }
 }
 
-// Funções específicas do MVP
-export function getCase() {
-  return apiGet("/case")
+// frontend/services/api.js
+const API_BASE_URL = "http://localhost:3333"
+
+async function handleResponse(response) {
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Erro HTTP ${response.status}`)
+  }
+  return response.json()
 }
 
-export function getCities() {
-  return apiGet("/cities")
+// ---------------------------
+// Endpoints já existentes
+// (ajuste se teus nomes forem outros)
+// ---------------------------
+export async function pingBackend() {
+  const res = await fetch(`${API_BASE_URL}/ping`)
+  return handleResponse(res)
 }
 
-export function getClues() {
-  return apiGet("/clues")
+export async function getCase () {
+  const res = await fetch(`${API_BASE_URL}/api/case`)
+  return handleResponse(res)
 }
 
-export function getSuspect() {
-  return apiGet("/suspect")
+export async function getCities() {
+  const res = await fetch(`${API_BASE_URL}/api/cities`)
+  return handleResponse(res)
+}
+
+export async function getSuspect() {
+  const res = await fetch(`${API_BASE_URL}/api/suspect`)
+  return handleResponse(res)
+}
+
+// ---------------------------
+// NOVOS ENDPOINTS – GAMEPLAY
+// ---------------------------
+
+export async function startGame() {
+  const res = await fetch(`${API_BASE_URL}/api/game/start`)
+  return handleResponse(res)
+}
+
+export async function investigate(step, clueIndex) {
+  const params = new URLSearchParams({
+    step: String(step),
+    clueIndex: String(clueIndex),
+  })
+
+  const res = await fetch(
+    `${API_BASE_URL}/api/game/investigate?${params.toString()}`
+  )
+  return handleResponse(res)
+}
+
+export async function getConnections(step) {
+  const params = new URLSearchParams({
+    step: String(step),
+  })
+
+  const res = await fetch(
+    `${API_BASE_URL}/api/game/connections?${params.toString()}`
+  )
+  return handleResponse(res)
+}
+
+export async function travel(step, chosenCityId) {
+  const res = await fetch(`${API_BASE_URL}/api/game/travel`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      step,
+      chosenCityId,
+    }),
+  })
+
+  return handleResponse(res)
 }
