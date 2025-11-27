@@ -1,0 +1,68 @@
+# -----------------------------------------
+# IGNORAR NODE_MODULES E BUILD
+# -----------------------------------------
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# -----------------------------------------
+# OUTPUTS DO NUXT E VITE
+# -----------------------------------------
+.nuxt/
+output/
+dist/
+build/
+.cache/
+.hotreload/
+vite.config.timestamp-*
+vite-temp/
+
+# -----------------------------------------
+# BUILD DO BACKEND
+# -----------------------------------------
+backend/tmp/
+backend/logs/
+backend/.cache/
+backend/.env
+
+# -----------------------------------------
+# AMBIENTE LOCAL
+# -----------------------------------------
+.env
+.env.local
+.env.*.local
+
+# -----------------------------------------
+# SISTEMA OPERACIONAL
+# -----------------------------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------------------------
+# IDE / EDITOR
+# -----------------------------------------
+.vscode/
+.idea/
+*.swp
+
+# -----------------------------------------
+# LOGS
+# -----------------------------------------
+logs/
+*.log
+*.log.*
+*.pid
+
+# -----------------------------------------
+# OUTROS
+# -----------------------------------------
+*.tmp
+*.temp
+*.old
+*.bak
+
+# Arquivos de upload temporário (se houver)
+uploads/
+temp/
