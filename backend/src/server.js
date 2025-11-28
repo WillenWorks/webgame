@@ -272,11 +272,14 @@ app.post("/api/game/travel", (req, res) => {
 
   const expectedCityId = leg.to
 
+  // Se escolheu cidade errada, não finaliza o caso
   if (chosenCityId !== expectedCityId) {
     return res.json({
       correct: false,
       message:
         "Você seguiu uma pista errada. O suspeito não foi visto nessa cidade.",
+      caseFinished: false,
+      isLast: false,
     })
   }
 
@@ -285,16 +288,32 @@ app.post("/api/game/travel", (req, res) => {
   const nextCityId = leg.to
   const nextCity = getCityById(nextCityId)
 
-  res.json({
+  // Se ainda não é a última etapa, só avança normalmente
+  if (!isLast) {
+    return res.json({
+      correct: true,
+      message: "Boa dedução. O suspeito passou por aqui e já seguiu viagem.",
+      nextStep,
+      isLast,
+      nextCity,
+      caseFinished: false,
+    })
+  }
+
+  // Última etapa: caso finalizado
+  return res.json({
     correct: true,
-    message: isLast
-      ? "Você chegou à cidade final. Prepare-se para o confronto."
-      : "Boa dedução. O suspeito passou por aqui e já seguiu viagem.",
+    message: "Operação concluída. Você chegou à cidade final.",
     nextStep,
-    isLast,
+    isLast: true,
     nextCity,
+    caseFinished: true,
+    result: "captured",
+    finalCity: nextCity,
+    finalStep: nextStep,
   })
 })
+
 
 // ------------------------------------------------------
 // 5. START SERVER
