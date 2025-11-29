@@ -1,12 +1,17 @@
 // backend/server.js
 import express from "express"
 import cors from "cors"
+import { generateCarmenCase } from "./services/llmService.js"
+import { testDbConnection } from "./database/database.js"
+import caseApiV1Routes from "./routes/caseApiV1Routes.js"
 
 const app = express()
 const PORT = 3333
 
 app.use(cors())
 app.use(express.json())
+app.use("/api/v1", caseApiV1Routes)
+
 
 // ------------------------------------------------------
 // 1. DADOS DO MVP – CASO, CIDADES, PISTAS, SUSPEITO
@@ -255,6 +260,17 @@ app.get("/api/game/connections", (req, res) => {
   })
 })
 
+app.get("/api/v1/dev/db-health", async (req, res) => {
+  try {
+    await testDbConnection()
+    res.json({ status: "ok", db: "connected" })
+  } catch (err) {
+    console.error("Erro em /api/v1/dev/db-health:", err)
+    res.status(500).json({ status: "error", db: "failed" })
+  }
+})
+
+
 /**
  * POST /api/game/travel
  * body: { step, chosenCityId }
@@ -314,11 +330,50 @@ app.post("/api/game/travel", (req, res) => {
   })
 })
 
-
 // ------------------------------------------------------
-// 5. START SERVER
+// ROTA DE TESTE DO MVP 0.2 (stub IA)
 // ------------------------------------------------------
 
-app.listen(PORT, () => {
-  console.log(`Backend Operação Monaco rodando em http://localhost:${PORT}`)
-})
+app.get("/api/dev/test-case", async (req, res) => {
+  try {
+    const result = await generateCarmenCase({
+      agentId: "agent_stub_001",
+      difficulty: "easy",
+    })
+
+    res.json({
+      source: "stub",
+      case: result,
+    })
+  } catch (error) {
+    console.error("Erro na rota /api/dev/test-case:", error)
+    res.status(500).json({ error: "Erro ao gerar caso de teste." })
+  }
+});
+
+async function startServer() {
+  try {
+    await testDbConnection()
+    console.log("✅ Conexão com MySQL OK")
+
+    app.listen(PORT, () => {
+      console.log(
+        `Backend Operação Monaco / MVP 0.2 rodando em http://localhost:${PORT}`,
+      )
+    })
+  } catch (err) {
+    console.error("❌ Erro ao conectar no MySQL:", err)
+    process.exit(1)
+  }
+}
+
+startServer()
+
+
+// // ------------------------------------------------------
+// // 5. START SERVER
+// // ------------------------------------------------------
+
+// app.listen(PORT, () => {
+//   console.log(`Backend Operação Monaco rodando em http://localhost:${PORT}`)
+// })

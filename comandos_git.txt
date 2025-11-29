@@ -1,0 +1,18 @@
+# garantir que tá na master (ou branch atual principal)
+git checkout master
+
+# atualizar com remoto (se tiver)
+git pull origin master
+
+# criar branch de snapshot do MVP 0.1
+git checkout -b release/mvp-0.1
+
+# commit final se tiver pendente
+git add .
+git commit -m "Snapshot MVP 0.1 estável"
+
+# subir essa branch pro remoto
+git push origin release/mvp-0.1
+
+# voltar pra master para começar o MVP 0.2
+git checkout master
