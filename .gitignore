@@ -33,6 +33,7 @@ backend/.env
 .env
 .env.local
 .env.*.local
+**/.env
 
 # -----------------------------------------
 # SISTEMA OPERACIONAL
