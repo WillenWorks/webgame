@@ -1,7 +1,6 @@
-// backend/server.js
+// backend/src/server.js
 import express from "express"
 import cors from "cors"
-import { generateCarmenCase } from "./services/llmService.js"
 import { testDbConnection } from "./database/database.js"
 import caseApiV1Routes from "./routes/caseApiV1Routes.js"
 
@@ -10,14 +9,17 @@ const PORT = 3333
 
 app.use(cors())
 app.use(express.json())
+
+// ------------------------------------------------------
+// API V1 (MVP 0.2 – Banco + Casos + IA)
+// ------------------------------------------------------
 app.use("/api/v1", caseApiV1Routes)
 
-
 // ------------------------------------------------------
-// 1. DADOS DO MVP – CASO, CIDADES, PISTAS, SUSPEITO
+// 1. DADOS DO MVP 0.1 – CASO, CIDADES, PISTAS, SUSPEITO
 // ------------------------------------------------------
 
-// Caso piloto
+// Caso piloto (MVP 0.1 – legado em memória)
 const caseData = {
   caseId: "case_001",
   title: "O Roubo do Meridiano Zero",
@@ -116,7 +118,7 @@ const legs = [
 ]
 
 // ------------------------------------------------------
-// 2. ENDPOINTS BÁSICOS (JÁ EXISTENTES)
+// 2. ENDPOINTS BÁSICOS (SAÚDE + DADOS ESTÁTICOS MVP 0.1)
 // ------------------------------------------------------
 
 // Teste simples do backend
@@ -124,7 +126,7 @@ app.get("/ping", (req, res) => {
   res.json({ message: "pong - backend Operação Monaco ativo" })
 })
 
-// Dados brutos do caso
+// Dados brutos do caso (MVP 0.1)
 app.get("/api/case", (req, res) => {
   res.json(caseData)
 })
@@ -138,7 +140,7 @@ app.get("/api/suspect", (req, res) => {
 })
 
 // ------------------------------------------------------
-// 3. FUNÇÕES DE APOIO
+// 3. FUNÇÕES DE APOIO (MVP 0.1)
 // ------------------------------------------------------
 
 function getCityById(id) {
@@ -167,7 +169,7 @@ function getRandomOtherCities(excludeIds, count) {
 }
 
 // ------------------------------------------------------
-// 4. ENDPOINTS DE GAMEPLAY (MVP 0.2)
+// 4. ENDPOINTS DE GAMEPLAY LEGACY (MVP 0.1 – /api/game/*)
 // ------------------------------------------------------
 
 /**
@@ -242,7 +244,7 @@ app.get("/api/game/connections", (req, res) => {
 
   const others = getRandomOtherCities(
     [currentCityId, correctCity.cityId],
-    2
+    2,
   )
 
   const options = [correctCity, ...others].map((city) => ({
@@ -259,17 +261,6 @@ app.get("/api/game/connections", (req, res) => {
     options,
   })
 })
-
-app.get("/api/v1/dev/db-health", async (req, res) => {
-  try {
-    await testDbConnection()
-    res.json({ status: "ok", db: "connected" })
-  } catch (err) {
-    console.error("Erro em /api/v1/dev/db-health:", err)
-    res.status(500).json({ status: "error", db: "failed" })
-  }
-})
-
 
 /**
  * POST /api/game/travel
@@ -331,25 +322,8 @@ app.post("/api/game/travel", (req, res) => {
 })
 
 // ------------------------------------------------------
-// ROTA DE TESTE DO MVP 0.2 (stub IA)
+// 5. START SERVER COM TESTE DE DB
 // ------------------------------------------------------
-
-app.get("/api/dev/test-case", async (req, res) => {
-  try {
-    const result = await generateCarmenCase({
-      agentId: "agent_stub_001",
-      difficulty: "easy",
-    })
-
-    res.json({
-      source: "stub",
-      case: result,
-    })
-  } catch (error) {
-    console.error("Erro na rota /api/dev/test-case:", error)
-    res.status(500).json({ error: "Erro ao gerar caso de teste." })
-  }
-});
 
 async function startServer() {
   try {
@@ -368,12 +342,3 @@ async function startServer() {
 }
 
 startServer()
-
-
-// // ------------------------------------------------------
-// // 5. START SERVER
-// // ------------------------------------------------------
-
-// app.listen(PORT, () => {
-//   console.log(`Backend Operação Monaco rodando em http://localhost:${PORT}`)
-// })

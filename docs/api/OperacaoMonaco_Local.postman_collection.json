@@ -3,7 +3,7 @@
     "_postman_id": "b6e2f6f8-0000-0000-0000-000000000000",
     "name": "Operacao Monaco – Local",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection básica para testar o backend local da Operação Monaco."
+    "description": "Collection básica para testar o backend local da Operação Monaco (MVP 0.1 + MVP 0.2)."
   },
   "item": [
     {
@@ -25,7 +25,7 @@
       ]
     },
     {
-      "name": "Dados estáticos",
+      "name": "Dados estáticos (MVP 0.1)",
       "item": [
         {
           "name": "GET /api/case",
@@ -69,7 +69,7 @@
       ]
     },
     {
-      "name": "Gameplay",
+      "name": "Gameplay (MVP 0.1 – Legacy)",
       "item": [
         {
           "name": "GET /api/game/start",
@@ -137,12 +137,88 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "MVP 0.2 – Banco + Casos",
+      "item": [
+        {
+          "name": "POST /api/v1/dev/generate-case",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"difficulty\": \"easy\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dev/generate-case",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dev", "generate-case"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/v1/cases/available",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cases/available?agentId=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cases", "available"],
+              "query": [
+                { "key": "agentId", "value": "1" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/v1/cases/:id/start",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cases", "{{caseId}}", "start"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/v1/dev/db-health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dev/db-health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "dev", "db-health"]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:3333"
+    },
+    {
+      "key": "caseId",
+      "value": "1"
     }
   ]
 }
