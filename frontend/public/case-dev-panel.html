@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Painel Dev - Operação Mônaco</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 16px;
+    }
+    h1, h2, h3 {
+      margin: 0 0 8px;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .panel {
+      background: #020617;
+      border-radius: 8px;
+      padding: 12px 14px;
+      border: 1px solid #1f2937;
+      box-shadow: 0 0 0 1px #020617;
+    }
+
+    label {
+      font-size: 13px;
+      display: block;
+      margin-bottom: 4px;
+      color: #9ca3af;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: 1px solid #6366f1;
+      border-color: #6366f1;
+    }
+
+    button {
+      padding: 6px 10px;
+      border-radius: 4px;
+      border: none;
+      font-size: 13px;
+      cursor: pointer;
+      background: #4f46e5;
+      color: #e5e7eb;
+      margin-right: 6px;
+      margin-top: 4px;
+    }
+
+    button.secondary {
+      background: #111827;
+      border: 1px solid #374151;
+    }
+
+    button.small-btn {
+      font-size: 11px;
+      padding: 4px 8px;
+      margin-right: 0;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .list {
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 6px;
+      border-radius: 4px;
+      border: 1px solid #1f2937;
+      background: #020617;
+    }
+
+    .case-item {
+      padding: 6px 8px;
+      border-bottom: 1px solid #111827;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .case-item:hover {
+      background: #111827;
+    }
+
+    .case-item.selected {
+      background: #1d293b;
+      border-left: 3px solid #6366f1;
+      padding-left: 5px;
+    }
+
+    pre {
+      background: #020617;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 12px;
+      overflow-x: auto;
+      border: 1px solid #1f2937;
+      max-height: 100%;
+      overflow-y: auto;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid #374151;
+      background: #020617;
+      margin-right: 4px;
+      margin-top: 2px;
+    }
+
+    .pill span.key {
+      color: #9ca3af;
+    }
+    .pill span.value {
+      color: #e5e7eb;
+      font-weight: 500;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .row > div {
+      flex: 1;
+    }
+
+    /* Painel flutuante de resposta */
+    #responsePanel {
+      position: fixed;
+      right: 16px;
+      top: 72px;
+      width: min(640px, 55vw);
+      height: 70vh;
+      z-index: 50;
+      display: none; /* escondido por padrão */
+    }
+
+    body.response-visible #responsePanel {
+      display: block;
+    }
+
+    #responsePanelHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    /* Fundo levemente escurecido opcional (pode comentar se não curtir) */
+    body.response-visible::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      z-index: 40;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top-bar">
+      <div>
+        <h1>Painel Dev · Operação Mônaco</h1>
+        <p class="small">
+          Teste rápido das rotas de casos (/cases). Clique nos casos, avance steps, veja pistas, suspeitos e emita mandado.
+        </p>
+      </div>
+      <button id="btnToggleResponse" class="secondary small-btn">
+        Ver resposta
+      </button>
+    </div>
+
+    <!-- Painel principal: Configuração & Casos -->
+    <div class="panel">
+      <h2>Configuração & Casos</h2>
+
+      <div class="row">
+        <div>
+          <label for="baseUrl">Base URL da API</label>
+          <input id="baseUrl" value="http://localhost:3333/api/v1" />
+        </div>
+        <div style="max-width: 120px;">
+          <label for="agentId">Agent ID</label>
+          <input id="agentId" type="number" value="1" />
+        </div>
+      </div>
+
+      <button id="btnHealth" class="secondary">Testar conexão /dev/db-health</button>
+      <button id="btnLoadCases">Carregar /cases/available</button>
+
+      <div class="list" id="casesList">
+        <!-- lista de casos aqui -->
+      </div>
+
+      <div id="selectedCaseInfo" style="margin-top: 10px;">
+        <h3>Caso selecionado</h3>
+        <p class="small" id="noCaseSelected">Nenhum caso selecionado.</p>
+        <div id="caseMeta" style="display:none; margin-bottom: 6px;"></div>
+
+        <div id="caseActions" style="display:none;">
+          <button id="btnStartCase">Iniciar / Retomar</button>
+          <button id="btnCurrentStep" class="secondary">Step Atual</button>
+          <button id="btnNextStep">Próximo Step</button>
+          <button id="btnCaseStatus" class="secondary">Status Completo</button>
+          <button id="btnCaseClues" class="secondary">Pistas</button>
+          <button id="btnCaseSuspects" class="secondary">Suspeitos</button>
+
+          <div style="margin-top: 8px;">
+            <label for="suspectIdInput">Emitir Mandado (suspectId)</label>
+            <input id="suspectIdInput" placeholder="Ex: 3" />
+            <button id="btnIssueWarrant">Emitir Mandado</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Painel flutuante da resposta -->
+  <div class="panel" id="responsePanel">
+    <div id="responsePanelHeader">
+      <h2>Resposta da API</h2>
+      <button id="btnCloseResponse" class="secondary small-btn">Fechar</button>
+    </div>
+    <p class="small">
+      Mostra o último JSON retornado. Útil pra debugar o backend enquanto sente a “vibe” do fluxo.
+    </p>
+    <div style="height: calc(100% - 60px);">
+      <pre id="responseOutput">{}</pre>
+    </div>
+  </div>
+
+  <script>
+    const baseUrlInput = document.getElementById("baseUrl")
+    const agentIdInput = document.getElementById("agentId")
+    const casesList = document.getElementById("casesList")
+    const responseOutput = document.getElementById("responseOutput")
+
+    const btnHealth = document.getElementById("btnHealth")
+    const btnLoadCases = document.getElementById("btnLoadCases")
+    const btnStartCase = document.getElementById("btnStartCase")
+    const btnCurrentStep = document.getElementById("btnCurrentStep")
+    const btnNextStep = document.getElementById("btnNextStep")
+    const btnCaseStatus = document.getElementById("btnCaseStatus")
+    const btnCaseClues = document.getElementById("btnCaseClues")
+    const btnCaseSuspects = document.getElementById("btnCaseSuspects")
+    const btnIssueWarrant = document.getElementById("btnIssueWarrant")
+
+    const btnToggleResponse = document.getElementById("btnToggleResponse")
+    const btnCloseResponse = document.getElementById("btnCloseResponse")
+
+    const selectedCaseInfo = document.getElementById("selectedCaseInfo")
+    const noCaseSelected = document.getElementById("noCaseSelected")
+    const caseMeta = document.getElementById("caseMeta")
+    const caseActions = document.getElementById("caseActions")
+    const suspectIdInput = document.getElementById("suspectIdInput")
+
+    let selectedCase = null
+    let lastCases = []
+
+    function getBaseUrl() {
+      return baseUrlInput.value.replace(/\/$/, "")
+    }
+
+    function getAgentId() {
+      return Number(agentIdInput.value || 1)
+    }
+
+    function setResponse(data) {
+      responseOutput.textContent = JSON.stringify(data, null, 2)
+    }
+
+    async function apiGet(path) {
+      const url = getBaseUrl() + path
+      const res = await fetch(url)
+      const json = await res.json().catch(() => ({}))
+      return { statusCode: res.status, json }
+    }
+
+    async function apiPost(path, body = {}) {
+      const url = getBaseUrl() + path
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json().catch(() => ({}))
+      return { statusCode: res.status, json }
+    }
+
+    function renderCasesList() {
+      casesList.innerHTML = ""
+      if (!lastCases || lastCases.length === 0) {
+        const div = document.createElement("div")
+        div.className = "case-item"
+        div.textContent = "Nenhum caso disponível."
+        casesList.appendChild(div)
+        return
+      }
+
+      lastCases.forEach(c => {
+        const div = document.createElement("div")
+        div.className = "case-item"
+        if (selectedCase && selectedCase.id === c.id) {
+          div.classList.add("selected")
+        }
+        div.innerHTML = `
+          <div><strong>#${c.id}</strong> · ${c.title || "(sem título)"}</div>
+          <div class="small">
+            Dificuldade: ${c.difficulty || "?"} · Status: ${c.status || "?"}
+          </div>
+        `
+        div.addEventListener("click", () => {
+          selectedCase = c
+          updateSelectedCaseInfo()
+          renderCasesList()
+        })
+        casesList.appendChild(div)
+      })
+    }
+
+    function updateSelectedCaseInfo() {
+      if (!selectedCase) {
+        noCaseSelected.style.display = "block"
+        caseMeta.style.display = "none"
+        caseActions.style.display = "none"
+        return
+      }
+
+      noCaseSelected.style.display = "none"
+      caseMeta.style.display = "block"
+      caseActions.style.display = "block"
+
+      const d = selectedCase
+      caseMeta.innerHTML = `
+        <div class="pill"><span class="key">ID</span><span class="value">#${d.id}</span></div>
+        <div class="pill"><span class="key">Título</span><span class="value">${d.title || "(sem título)"}</span></div>
+        <div class="pill"><span class="key">Dificuldade</span><span class="value">${d.difficulty || "?"}</span></div>
+        <div class="pill"><span class="key">Status</span><span class="value">${d.status || "?"}</span></div>
+        <div class="pill"><span class="key">Max Turns</span><span class="value">${d.max_turns ?? "não definido"}</span></div>
+      `
+    }
+
+    // Botões das rotas
+    btnHealth.addEventListener("click", async () => {
+      try {
+        const res = await apiGet("/dev/db-health")
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnLoadCases.addEventListener("click", async () => {
+      try {
+        const agentId = getAgentId()
+        const res = await apiGet(`/cases/available?agentId=${agentId}`)
+        setResponse(res)
+        if (res.json && res.json.data) {
+          lastCases = res.json.data
+          renderCasesList()
+        }
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnStartCase.addEventListener("click", async () => {
+      if (!selectedCase) return
+      try {
+        const res = await apiPost(`/cases/${selectedCase.id}/start`, {
+          agentId: getAgentId(),
+        })
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnCurrentStep.addEventListener("click", async () => {
+      if (!selectedCase) return
+      try {
+        const res = await apiGet(
+          `/cases/${selectedCase.id}/step/current?agentId=${getAgentId()}`
+        )
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnNextStep.addEventListener("click", async () => {
+      if (!selectedCase) return
+      try {
+        const res = await apiPost(`/cases/${selectedCase.id}/step/next`, {
+          agentId: getAgentId(),
+        })
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnCaseStatus.addEventListener("click", async () => {
+      if (!selectedCase) return
+      try {
+        const res = await apiGet(
+          `/cases/${selectedCase.id}/status?agentId=${getAgentId()}`
+        )
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnCaseClues.addEventListener("click", async () => {
+      if (!selectedCase) return
+      try {
+        const res = await apiGet(
+          `/cases/${selectedCase.id}/clues?agentId=${getAgentId()}`
+        )
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnCaseSuspects.addEventListener("click", async () => {
+      if (!selectedCase) return
+      try {
+        const res = await apiGet(`/cases/${selectedCase.id}/suspects`)
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    btnIssueWarrant.addEventListener("click", async () => {
+      if (!selectedCase) return
+      const suspectId = Number(suspectIdInput.value)
+      if (!suspectId) {
+        alert("Informe um suspectId antes de emitir o mandado.")
+        return
+      }
+      try {
+        const res = await apiPost(`/cases/${selectedCase.id}/warrant`, {
+          agentId: getAgentId(),
+          suspectId,
+          selectedAttributes: null,
+        })
+        setResponse(res)
+      } catch (err) {
+        setResponse({ error: String(err) })
+      }
+    })
+
+    // Toggle do painel de resposta
+    btnToggleResponse.addEventListener("click", () => {
+      const visible = document.body.classList.toggle("response-visible")
+      btnToggleResponse.textContent = visible ? "Esconder resposta" : "Ver resposta"
+    })
+
+    btnCloseResponse.addEventListener("click", () => {
+      document.body.classList.remove("response-visible")
+      btnToggleResponse.textContent = "Ver resposta"
+    })
+
+    // Fechar clicando no fundo escurecido
+    document.addEventListener("click", (event) => {
+      const panel = document.getElementById("responsePanel")
+      if (!document.body.classList.contains("response-visible")) return
+
+      const clickInsidePanel = panel.contains(event.target)
+      const clickOnToggle = btnToggleResponse.contains(event.target)
+      if (!clickInsidePanel && !clickOnToggle) {
+        document.body.classList.remove("response-visible")
+        btnToggleResponse.textContent = "Ver resposta"
+      }
+    })
+
+    // Carregar casos automaticamente ao abrir
+    window.addEventListener("load", () => {
+      btnLoadCases.click()
+    })
+  </script>
+</body>
+</html>
