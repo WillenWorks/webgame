@@ -65,10 +65,13 @@ import { useRouter } from "vue-router"
 const router = useRouter()
 
 function startNewInvestigation() {
-  router.push("/game")
+  // Leva direto para a lista de casos do novo sistema
+  router.push("/cases")
 }
 
 function continueCase() {
-  router.push("/game")
+  // Por enquanto, mesmo comportamento: sempre para o novo hub
+  router.push("/cases")
 }
 </script>
+
