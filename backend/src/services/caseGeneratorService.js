@@ -17,7 +17,8 @@ function shuffle(array) {
  * - chama IA para gerar narrativa (título, resumo, steps)
  * - cria registro em `cases`
  * - cria 10 `case_suspects` (snapshot)
- * - cria `case_steps` usando os steps da IA (ou fallback genérico se falhar)
+ * - cria `case_steps` usando os steps da IA (ou fallback)
+ * - cria `case_villain_clues` com pistas ligadas aos atributos do vilão
  */
 export async function createCaseForAgent(agentId, difficulty = "easy") {
   const pool = getDbPool()
@@ -85,7 +86,7 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
       aiNarrative = null
     }
 
-    // 4) Cria o registro de case com título/resumo (IA ou fallback)
+    // 4) Cria o registro de case
     const [caseResult] = await conn.query(
       `INSERT INTO cases
        (agent_id, external_case_id, title, summary, status, difficulty, villain_template_id, start_location_id)
@@ -131,10 +132,21 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
       )
     }
 
-    // 6) Cria case_steps
-    // Se a IA gerou steps válidos, usamos eles. Caso contrário, usamos fallback simples.
+    // 6) Cria case_steps + registra meta para pistas
+    const attributeMap = {
+      name: guilty.name,
+      sex: guilty.sex,
+      occupation: guilty.occupation,
+      hobby: guilty.hobby,
+      hair_color: guilty.hair_color,
+      vehicle: guilty.vehicle,
+      feature: guilty.feature,
+      other: guilty.other,
+    }
+
+    const createdStepsMeta = []
+
     if (aiNarrative && Array.isArray(aiNarrative.steps) && aiNarrative.steps.length > 0) {
-      // Mapa rápido de nome -> location
       const locationByName = new Map()
       for (const loc of locations) {
         locationByName.set(loc.name, loc)
@@ -144,7 +156,7 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
       for (const step of aiNarrative.steps) {
         const loc = locationByName.get(step.location) || startLocation
 
-        await conn.query(
+        const [stepResult] = await conn.query(
           `INSERT INTO case_steps
            (case_id, step_order, from_location_id, to_location_id, step_type, description)
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -158,12 +170,19 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
           ],
         )
 
+        const stepId = stepResult.insertId
+
+        createdStepsMeta.push({
+          order,
+          stepId,
+          villainClueAttr: step.villain_clue_attribute || null,
+        })
+
         order++
-        // No futuro: aqui podemos usar step.villain_clue_attribute pra popular case_villain_clues
       }
     } else {
       // Fallback: 2 steps básicos se IA falhar
-      await conn.query(
+      const [step1Result] = await conn.query(
         `INSERT INTO case_steps
          (case_id, step_order, from_location_id, to_location_id, step_type, description)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -177,7 +196,7 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
         ],
       )
 
-      await conn.query(
+      const [step2Result] = await conn.query(
         `INSERT INTO case_steps
          (case_id, step_order, from_location_id, to_location_id, step_type, description)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -189,6 +208,34 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
           "clue",
           `Moradores locais relatam ter visto uma figura compatível com o perfil de ${guilty.name} circulando em áreas turísticas.`,
         ],
+      )
+
+      createdStepsMeta.push({
+        order: 1,
+        stepId: step1Result.insertId,
+        villainClueAttr: null,
+      })
+      createdStepsMeta.push({
+        order: 2,
+        stepId: step2Result.insertId,
+        villainClueAttr: null,
+      })
+    }
+
+    // 7) Criar entradas em case_villain_clues com base nas metas
+    for (const meta of createdStepsMeta) {
+      if (!meta.villainClueAttr) continue
+
+      const attrName = meta.villainClueAttr
+      const attrValue = attributeMap[attrName]
+
+      if (!attrValue) continue
+
+      await conn.query(
+        `INSERT INTO case_villain_clues
+         (case_id, step_id, attribute_name, attribute_value)
+         VALUES (?, ?, ?, ?)`,
+        [caseId, meta.stepId, attrName, attrValue],
       )
     }
 
@@ -238,6 +285,7 @@ export async function getAvailableCasesForAgent(agentId) {
  * Inicia um caso para um agente:
  * - valida se o caso pertence ao agente
  * - se estiver 'available', muda pra 'in_progress'
+ * - se estiver encerrado, bloqueia
  * - retorna dados do caso + primeiro step + suspeitos
  */
 export async function startCaseForAgent(caseId, agentId) {
@@ -257,6 +305,10 @@ export async function startCaseForAgent(caseId, agentId) {
     }
 
     const caseData = caseRows[0]
+
+    if (caseData.status === "solved" || caseData.status === "failed") {
+      throw new Error("Caso já encerrado. Não é possível reiniciar.")
+    }
 
     if (caseData.status === "available") {
       await conn.query(
