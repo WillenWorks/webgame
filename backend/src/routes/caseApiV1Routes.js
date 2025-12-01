@@ -9,8 +9,13 @@ import {
 } from "../services/caseGeneratorService.js"
 import { getDbPool, testDbConnection } from "../database/database.js"
 import { generateCarmenCaseStructure } from "../services/llmService.js"
+import {
+  applyCaseResult,
+  getMaxTurnsForDifficulty,
+} from "../services/gameMechanicsService.js"
 
 const router = Router()
+const pool = getDbPool()
 
 // ------------------------------------------------------
 // HEALTHCHECK DO BANCO (DEV)
@@ -247,11 +252,34 @@ router.post("/cases/:id/step/next", async (req, res) => {
 
     const status = await advanceCaseStep(caseId, agentId)
 
+    const difficulty = status.case?.difficulty || "easy"
+    const maxTurns =
+      status.case?.max_turns || getMaxTurnsForDifficulty(difficulty)
+    const turnsUsed = status.progress?.turns_used ?? 0
+
+    let caseEndedByTime = false
+    let scoring = null
+
+    if (
+      Number.isFinite(maxTurns) &&
+      turnsUsed >= maxTurns &&
+      status.case?.status === "in_progress"
+    ) {
+      caseEndedByTime = true
+      scoring = await applyCaseResult({
+        caseId,
+        agentId,
+        result: "failed_time",
+      })
+    }
+
     res.json({
       status: "ok",
-      message: status.reachedEnd
-        ? "Você alcançou o último passo deste caso."
-        : "Step avançado com sucesso.",
+      message: caseEndedByTime
+        ? "Você excedeu o número máximo de turnos permitidos. O caso foi encerrado por tempo."
+        : status.reachedEnd
+          ? "Você alcançou o último passo deste caso."
+          : "Step avançado com sucesso.",
       data: {
         case: status.case,
         currentStep: status.currentStep,
@@ -260,6 +288,9 @@ router.post("/cases/:id/step/next", async (req, res) => {
         suspects: status.suspects,
         canIssueWarrant: status.canIssueWarrant,
         reachedEnd: status.reachedEnd,
+        maxTurns,
+        timeExceeded: caseEndedByTime,
+        scoring,
       },
     })
   } catch (err) {
@@ -381,85 +412,148 @@ router.get("/cases/:id/suspects", async (req, res) => {
 // ------------------------------------------------------
 // MANDADO DE PRISÃO – CONCLUIR CASO
 // ------------------------------------------------------
-router.post("/cases/:id/warrant", async (req, res) => {
-  const caseId = Number(req.params.id)
+// POST /api/v1/cases/:caseId/warrant
+router.post("/cases/:caseId/warrant", async (req, res) => {
+  const caseId = Number(req.params.caseId)
+  const { agentId, suspectId, selectedAttributes } = req.body || {}
 
-  const body = req.body || {}
-  const agentId = Number(body.agentId || req.query.agentId || 1)
-  const suspectId = Number(body.suspectId)
-
-  if (!suspectId) {
+  if (!caseId || !agentId || !suspectId) {
     return res.status(400).json({
       status: "error",
-      message: "É necessário informar suspectId no body.",
+      message:
+        "É necessário informar caseId (params), agentId e suspectId (body).",
     })
   }
 
-  const pool = getDbPool()
-  const conn = await pool.getConnection()
-
   try {
-    await conn.beginTransaction()
-
-    const [caseRows] = await conn.query(
-      "SELECT * FROM cases WHERE id = ? AND agent_id = ?",
-      [caseId, agentId],
+    // 1) Garantir que o case existe e está em progresso
+    const [[caseRow]] = await pool.query(
+      `
+      SELECT id, agent_id, status, difficulty, max_turns
+      FROM cases
+      WHERE id = ?
+      `,
+      [caseId],
     )
 
-    if (!caseRows || caseRows.length === 0) {
-      throw new Error("Caso não encontrado para este agente.")
+    if (!caseRow) {
+      return res.status(404).json({
+        status: "error",
+        message: "Caso não encontrado.",
+      })
     }
 
-    const caseData = caseRows[0]
-
-    if (caseData.status === "solved" || caseData.status === "failed") {
-      throw new Error("Caso já está encerrado.")
+    if (caseRow.status !== "in_progress") {
+      return res.status(400).json({
+        status: "error",
+        message: "Caso não está em andamento.",
+      })
     }
 
-    const [suspectRows] = await conn.query(
-      "SELECT * FROM case_suspects WHERE id = ? AND case_id = ?",
+    if (caseRow.agent_id !== agentId) {
+      // se você quiser permitir que outro agente veja, adapte isso
+      return res.status(403).json({
+        status: "error",
+        message: "Este caso não pertence a este agente.",
+      })
+    }
+
+    // 2) Verificar se o suspeito faz parte deste caso
+    const [[suspectRow]] = await pool.query(
+      `
+      SELECT id, case_id, villain_template_id, is_guilty,
+             name_snapshot
+      FROM case_suspects
+      WHERE id = ? AND case_id = ?
+      `,
       [suspectId, caseId],
     )
 
-    if (!suspectRows || suspectRows.length === 0) {
-      throw new Error("Suspeito não pertence a este caso.")
+    if (!suspectRow) {
+      return res.status(400).json({
+        status: "error",
+        message: "Suspeito não pertence a este caso.",
+        error: "Suspeito não pertence a este caso.",
+      })
     }
 
-    const suspect = suspectRows[0]
-    const isGuilty = suspect.is_guilty === 1
+    const isCorrect = suspectRow.is_guilty === 1
 
-    const newStatus = isGuilty ? "solved" : "failed"
-
-    await conn.query(
-      "UPDATE cases SET status = ?, closed_at = NOW() WHERE id = ?",
-      [newStatus, caseId],
+    // 3) Registrar o mandado em `warrants`
+    await pool.query(
+      `
+      INSERT INTO warrants
+        (case_id, agent_id, suspect_id, selected_attributes, is_correct)
+      VALUES (?, ?, ?, ?, ?)
+      `,
+      [
+        caseId,
+        agentId,
+        suspectId,
+        selectedAttributes ? JSON.stringify(selectedAttributes) : null,
+        isCorrect ? 1 : 0,
+      ],
     )
 
-    await conn.commit()
+    if (!isCorrect) {
+      // 4a) Mandado errado: incrementa wrong_warrants no case_progress
+      await pool.query(
+        `
+        UPDATE case_progress
+        SET wrong_warrants = wrong_warrants + 1
+        WHERE case_id = ? AND agent_id = ?
+        `,
+        [caseId, agentId],
+      )
 
-    res.json({
+      // Aqui a gente pode, futuramente, decidir encerrar o caso
+      // por "failed_wrong_suspect" se exceder X tentativas.
+      // Por enquanto, só retorna erro.
+      return res.status(200).json({
+        status: "error",
+        result: "wrong_suspect",
+        message:
+          "Mandado emitido para o suspeito errado. O caso ainda permanece em aberto, mas sua reputação foi afetada.",
+      })
+    }
+
+    // 4b) Mandado correto: aplicar resultado "solved" com score/XP/promoção
+    const scoring = await applyCaseResult({
+      caseId,
+      agentId,
+      result: "solved",
+    })
+
+    // Registra também o vilão capturado (para galeria)
+    await pool.query(
+      `
+      INSERT INTO captured_villains
+        (agent_id, case_id, villain_template_id)
+      VALUES (?, ?, ?)
+      `,
+      [agentId, caseId, suspectRow.villain_template_id],
+    )
+
+    return res.json({
       status: "ok",
-      result: isGuilty ? "correct_arrest" : "wrong_arrest",
-      caseStatus: newStatus,
+      result: "correct_arrest",
+      caseStatus: "solved",
       selectedSuspect: {
-        id: suspect.id,
-        name: suspect.name_snapshot,
-        villain_template_id: suspect.villain_template_id,
+        id: suspectRow.id,
+        name: suspectRow.name_snapshot,
+        villain_template_id: suspectRow.villain_template_id,
       },
-      message: isGuilty
-        ? "Mandado de prisão bem-sucedido. Você prendeu o verdadeiro culpado."
-        : "Mandado de prisão incorreto. O verdadeiro culpado escapou.",
+      scoring, // { score, reputationDelta, newXp, newReputation, newPosition, result }
+      message:
+        "Mandado de prisão bem-sucedido. Você prendeu o verdadeiro culpado.",
     })
   } catch (err) {
-    await conn.rollback()
-    console.error("Erro em POST /cases/:id/warrant:", err)
-    res.status(500).json({
+    console.error("Erro em POST /cases/:caseId/warrant:", err)
+    return res.status(500).json({
       status: "error",
-      message: err.message || "Erro ao registrar mandado de prisão",
+      message: "Erro ao emitir mandado de prisão.",
       error: err.message,
     })
-  } finally {
-    conn.release()
   }
 })
 
