@@ -4,6 +4,8 @@ import {
   createCaseForAgent,
   getAvailableCasesForAgent,
   startCaseForAgent,
+  getCaseInvestigationStatus,
+  advanceCaseStep,
 } from "../services/caseGeneratorService.js"
 import { getDbPool, testDbConnection } from "../database/database.js"
 import { generateCarmenCaseStructure } from "../services/llmService.js"
@@ -32,7 +34,7 @@ router.get("/dev/db-health", async (req, res) => {
 // ------------------------------------------------------
 router.post("/dev/generate-case", async (req, res) => {
   try {
-    const agentId = Number(req.body.agentId || 1)
+    const agentId = Number(req.body?.agentId || 1)
     const difficulty = req.body?.difficulty || "easy"
 
     const result = await createCaseForAgent(agentId, difficulty)
@@ -181,18 +183,18 @@ router.get("/cases/available", async (req, res) => {
 })
 
 // ------------------------------------------------------
-// INICIAR CASO
+// INICIAR CASO (OU RETOMAR EM ANDAMENTO)
 // ------------------------------------------------------
 router.post("/cases/:id/start", async (req, res) => {
   try {
     const caseId = Number(req.params.id)
-    const agentId = Number(req.body.agentId || req.query.agentId || 1)
+    const agentId = Number(req.body?.agentId || req.query.agentId || 1)
 
     const result = await startCaseForAgent(caseId, agentId)
 
     res.json({
       status: "ok",
-      message: "Caso iniciado ou já estava em andamento",
+      message: "Caso iniciado ou retomado em andamento",
       data: result,
     })
   } catch (err) {
@@ -206,44 +208,110 @@ router.post("/cases/:id/start", async (req, res) => {
 })
 
 // ------------------------------------------------------
-// LISTAR PISTAS DO CASO (DOSSIÊ)
+// STEP ATUAL DO CASO
+// ------------------------------------------------------
+router.get("/cases/:id/step/current", async (req, res) => {
+  try {
+    const caseId = Number(req.params.id)
+    const agentId = Number(req.query.agentId || 1)
+
+    const status = await getCaseInvestigationStatus(caseId, agentId)
+
+    res.json({
+      status: "ok",
+      data: {
+        case: status.case,
+        currentStep: status.currentStep,
+        progress: status.progress,
+        clues: status.clues,
+        canIssueWarrant: status.canIssueWarrant,
+      },
+    })
+  } catch (err) {
+    console.error("Erro em GET /cases/:id/step/current:", err)
+    res.status(500).json({
+      status: "error",
+      message: err.message || "Erro ao buscar step atual",
+      error: err.message,
+    })
+  }
+})
+
+// ------------------------------------------------------
+// AVANÇAR PARA O PRÓXIMO STEP
+// ------------------------------------------------------
+router.post("/cases/:id/step/next", async (req, res) => {
+  try {
+    const caseId = Number(req.params.id)
+    const agentId = Number(req.body?.agentId || req.query.agentId || 1)
+
+    const status = await advanceCaseStep(caseId, agentId)
+
+    res.json({
+      status: "ok",
+      message: status.reachedEnd
+        ? "Você alcançou o último passo deste caso."
+        : "Step avançado com sucesso.",
+      data: {
+        case: status.case,
+        currentStep: status.currentStep,
+        progress: status.progress,
+        clues: status.clues,
+        suspects: status.suspects,
+        canIssueWarrant: status.canIssueWarrant,
+        reachedEnd: status.reachedEnd,
+      },
+    })
+  } catch (err) {
+    console.error("Erro em POST /cases/:id/step/next:", err)
+    res.status(500).json({
+      status: "error",
+      message: err.message || "Erro ao avançar step",
+      error: err.message,
+    })
+  }
+})
+
+// ------------------------------------------------------
+// STATUS COMPLETO DO CASO (DASHBOARD)
+// ------------------------------------------------------
+router.get("/cases/:id/status", async (req, res) => {
+  try {
+    const caseId = Number(req.params.id)
+    const agentId = Number(req.query.agentId || 1)
+
+    const status = await getCaseInvestigationStatus(caseId, agentId)
+
+    res.json({
+      status: "ok",
+      data: status,
+    })
+  } catch (err) {
+    console.error("Erro em GET /cases/:id/status:", err)
+    res.status(500).json({
+      status: "error",
+      message: err.message || "Erro ao buscar status do caso",
+      error: err.message,
+    })
+  }
+})
+
+// ------------------------------------------------------
+// LISTAR PISTAS DO CASO (DOSSIÊ) - RESPEITANDO PROGRESSO
 // ------------------------------------------------------
 router.get("/cases/:id/clues", async (req, res) => {
-  const caseId = Number(req.params.id)
-  const pool = getDbPool()
-
   try {
-    const [caseRows] = await pool.query(
-      "SELECT id, status FROM cases WHERE id = ?",
-      [caseId],
-    )
+    const caseId = Number(req.params.id)
+    const agentId = Number(req.query.agentId || 1)
 
-    if (!caseRows || caseRows.length === 0) {
-      return res.status(404).json({
-        status: "error",
-        message: "Caso não encontrado",
-      })
-    }
-
-    const [clueRows] = await pool.query(
-      `SELECT cvc.id,
-              cvc.step_id,
-              cs.step_order,
-              cvc.attribute_name,
-              cvc.attribute_value,
-              cvc.created_at
-       FROM case_villain_clues cvc
-       LEFT JOIN case_steps cs ON cs.id = cvc.step_id
-       WHERE cvc.case_id = ?
-       ORDER BY cs.step_order ASC, cvc.id ASC`,
-      [caseId],
-    )
+    const status = await getCaseInvestigationStatus(caseId, agentId)
 
     res.json({
       status: "ok",
       data: {
         caseId,
-        clues: clueRows,
+        progress: status.progress,
+        clues: status.clues,
       },
     })
   } catch (err) {
@@ -293,7 +361,6 @@ router.get("/cases/:id/suspects", async (req, res) => {
       [caseId],
     )
 
-    // não retornamos explicitamente quem é culpado, mas o front consegue comparar pistas
     res.json({
       status: "ok",
       data: {
@@ -316,8 +383,10 @@ router.get("/cases/:id/suspects", async (req, res) => {
 // ------------------------------------------------------
 router.post("/cases/:id/warrant", async (req, res) => {
   const caseId = Number(req.params.id)
-  const agentId = Number(req.body.agentId || req.query.agentId || 1)
-  const suspectId = Number(req.body.suspectId)
+
+  const body = req.body || {}
+  const agentId = Number(body.agentId || req.query.agentId || 1)
+  const suspectId = Number(body.suspectId)
 
   if (!suspectId) {
     return res.status(400).json({

@@ -282,11 +282,12 @@ export async function getAvailableCasesForAgent(agentId) {
 }
 
 /**
- * Inicia um caso para um agente:
+ * Inicia (ou retoma) um caso para um agente:
  * - valida se o caso pertence ao agente
  * - se estiver 'available', muda pra 'in_progress'
- * - se estiver encerrado, bloqueia
- * - retorna dados do caso + primeiro step + suspeitos
+ * - se estiver encerrado (solved/failed), bloqueia
+ * - garante registro em case_progress
+ * - retorna dados do caso + step atual + suspeitos + progresso
  */
 export async function startCaseForAgent(caseId, agentId) {
   const pool = getDbPool()
@@ -318,12 +319,49 @@ export async function startCaseForAgent(caseId, agentId) {
       caseData.status = "in_progress"
     }
 
+    // Progresso do caso
+    const [progressRows] = await conn.query(
+      "SELECT * FROM case_progress WHERE case_id = ? AND agent_id = ?",
+      [caseId, agentId],
+    )
+
+    let currentStepOrder = 1
+    let progressId = null
+
+    if (!progressRows || progressRows.length === 0) {
+      const [progressInsert] = await conn.query(
+        "INSERT INTO case_progress (case_id, agent_id, current_step_order) VALUES (?, ?, ?)",
+        [caseId, agentId, 1],
+      )
+      progressId = progressInsert.insertId
+      currentStepOrder = 1
+    } else {
+      const prog = progressRows[0]
+      progressId = prog.id
+      currentStepOrder = prog.current_step_order || 1
+    }
+
     const [stepRows] = await conn.query(
       "SELECT * FROM case_steps WHERE case_id = ? ORDER BY step_order ASC",
       [caseId],
     )
 
-    const firstStep = stepRows.length > 0 ? stepRows[0] : null
+    const totalSteps = stepRows.length
+
+    if (totalSteps === 0) {
+      throw new Error("Caso sem passos configurados.")
+    }
+
+    if (currentStepOrder > totalSteps) {
+      currentStepOrder = totalSteps
+      await conn.query(
+        "UPDATE case_progress SET current_step_order = ? WHERE id = ?",
+        [currentStepOrder, progressId],
+      )
+    }
+
+    const currentStep =
+      stepRows.find((s) => s.step_order === currentStepOrder) || stepRows[0]
 
     const [suspectRows] = await conn.query(
       `SELECT 
@@ -352,13 +390,232 @@ export async function startCaseForAgent(caseId, agentId) {
         status: caseData.status,
         difficulty: caseData.difficulty,
         created_at: caseData.created_at,
+        closed_at: caseData.closed_at || null,
       },
-      firstStep,
+      currentStep,
+      progress: {
+        current: currentStepOrder,
+        total: totalSteps,
+      },
       suspects: suspectRows,
     }
   } catch (err) {
     await conn.rollback()
     console.error("Erro em startCaseForAgent:", err)
+    throw err
+  } finally {
+    conn.release()
+  }
+}
+
+/**
+ * Retorna o status completo da investigação para um agente:
+ * - case
+ * - step atual
+ * - progresso (current/total)
+ * - pistas liberadas até o step atual
+ * - suspeitos
+ * - canIssueWarrant (se já chegou no último step e estiver em andamento)
+ */
+export async function getCaseInvestigationStatus(caseId, agentId) {
+  const pool = getDbPool()
+
+  const [caseRows] = await pool.query(
+    "SELECT * FROM cases WHERE id = ? AND agent_id = ?",
+    [caseId, agentId],
+  )
+
+  if (!caseRows || caseRows.length === 0) {
+    throw new Error("Caso não encontrado para este agente.")
+  }
+
+  const caseData = caseRows[0]
+
+  const [[stepsCountRow]] = await pool.query(
+    "SELECT COUNT(*) AS totalSteps FROM case_steps WHERE case_id = ?",
+    [caseId],
+  )
+
+  const totalSteps = stepsCountRow.totalSteps || 0
+
+  let currentStepOrder = 1
+
+  const [progressRows] = await pool.query(
+    "SELECT * FROM case_progress WHERE case_id = ? AND agent_id = ?",
+    [caseId, agentId],
+  )
+
+  if (progressRows && progressRows.length > 0) {
+    currentStepOrder = progressRows[0].current_step_order || 1
+  }
+
+  if (totalSteps > 0 && currentStepOrder > totalSteps) {
+    currentStepOrder = totalSteps
+  }
+
+  let currentStep = null
+
+  if (totalSteps > 0) {
+    const [stepRows] = await pool.query(
+      `SELECT cs.*,
+              l.name AS location_name,
+              l.country AS location_country
+       FROM case_steps cs
+       LEFT JOIN locations l ON l.id = cs.to_location_id
+       WHERE cs.case_id = ? AND cs.step_order = ?
+       ORDER BY cs.step_order ASC`,
+      [caseId, currentStepOrder],
+    )
+
+    currentStep = stepRows.length > 0 ? stepRows[0] : null
+  }
+
+  const [clueRows] = await pool.query(
+    `SELECT cvc.id,
+            cvc.step_id,
+            cs.step_order,
+            cvc.attribute_name,
+            cvc.attribute_value,
+            cvc.created_at
+     FROM case_villain_clues cvc
+     LEFT JOIN case_steps cs ON cs.id = cvc.step_id
+     WHERE cvc.case_id = ?
+       AND (cs.step_order IS NULL OR cs.step_order <= ?)
+     ORDER BY cs.step_order ASC, cvc.id ASC`,
+    [caseId, currentStepOrder],
+  )
+
+  const [suspects] = await pool.query(
+    `SELECT 
+       id,
+       villain_template_id,
+       is_guilty,
+       name_snapshot,
+       sex_snapshot,
+       occupation_snapshot,
+       hobby_snapshot,
+       hair_color_snapshot,
+       vehicle_snapshot,
+       feature_snapshot
+     FROM case_suspects
+     WHERE case_id = ?`,
+    [caseId],
+  )
+
+  const canIssueWarrant =
+    caseData.status === "in_progress" && totalSteps > 0 && currentStepOrder >= totalSteps
+
+  return {
+    case: {
+      id: caseData.id,
+      title: caseData.title,
+      summary: caseData.summary,
+      status: caseData.status,
+      difficulty: caseData.difficulty,
+      created_at: caseData.created_at,
+      closed_at: caseData.closed_at || null,
+    },
+    currentStep,
+    progress: {
+      current: totalSteps === 0 ? 0 : currentStepOrder,
+      total: totalSteps,
+    },
+    clues: clueRows,
+    suspects,
+    canIssueWarrant,
+  }
+}
+
+/**
+ * Avança o step do caso para o agente:
+ * - valida caso
+ * - valida status
+ * - valida progresso
+ * - se já estiver no último step: não avança, apenas sinaliza que pode emitir mandado
+ * - se avançar: atualiza current_step_order e retorna status atualizado
+ */
+export async function advanceCaseStep(caseId, agentId) {
+  const pool = getDbPool()
+  const conn = await pool.getConnection()
+
+  try {
+    await conn.beginTransaction()
+
+    const [caseRows] = await conn.query(
+      "SELECT * FROM cases WHERE id = ? AND agent_id = ?",
+      [caseId, agentId],
+    )
+
+    if (!caseRows || caseRows.length === 0) {
+      throw new Error("Caso não encontrado para este agente.")
+    }
+
+    const caseData = caseRows[0]
+
+    if (caseData.status === "solved" || caseData.status === "failed") {
+      throw new Error("Caso já encerrado. Não é possível avançar passos.")
+    }
+
+    const [[stepsCountRow]] = await conn.query(
+      "SELECT COUNT(*) AS totalSteps FROM case_steps WHERE case_id = ?",
+      [caseId],
+    )
+
+    const totalSteps = stepsCountRow.totalSteps || 0
+
+    if (totalSteps === 0) {
+      throw new Error("Caso sem passos configurados.")
+    }
+
+    const [progressRows] = await conn.query(
+      "SELECT * FROM case_progress WHERE case_id = ? AND agent_id = ?",
+      [caseId, agentId],
+    )
+
+    let currentStepOrder = 1
+    let progressId = null
+
+    if (!progressRows || progressRows.length === 0) {
+      const [progressInsert] = await conn.query(
+        "INSERT INTO case_progress (case_id, agent_id, current_step_order) VALUES (?, ?, ?)",
+        [caseId, agentId, 1],
+      )
+      progressId = progressInsert.insertId
+      currentStepOrder = 1
+    } else {
+      const prog = progressRows[0]
+      progressId = prog.id
+      currentStepOrder = prog.current_step_order || 1
+    }
+
+    if (currentStepOrder >= totalSteps) {
+      // já está no último step
+      await conn.commit()
+      const status = await getCaseInvestigationStatus(caseId, agentId)
+      return {
+        ...status,
+        reachedEnd: true,
+      }
+    }
+
+    const newOrder = currentStepOrder + 1
+
+    await conn.query(
+      "UPDATE case_progress SET current_step_order = ? WHERE id = ?",
+      [newOrder, progressId],
+    )
+
+    await conn.commit()
+
+    const status = await getCaseInvestigationStatus(caseId, agentId)
+
+    return {
+      ...status,
+      reachedEnd: status.progress.current >= status.progress.total,
+    }
+  } catch (err) {
+    await conn.rollback()
+    console.error("Erro em advanceCaseStep:", err)
     throw err
   } finally {
     conn.release()
