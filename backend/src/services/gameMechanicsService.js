@@ -20,14 +20,15 @@ export function getMaxTurnsForDifficulty(difficulty) {
 }
 
 /**
- * Calcula pontuação e impacto em reputação com base no desempenho:
- *  - base por dificuldade
- *  - bônus por tempo (menos turnos usados)
- *  - penalidade por viagens erradas (wrong_travels)
- *  - penalidade por mandados errados (wrong_warrants)
- *  - bônus leve de eficiência
+ * Calcula pontuação e impacto em reputação
+ * com base em:
+ *  - dificuldade do caso
+ *  - turnos usados vs. turnos máximos
+ *  - viagens erradas
+ *  - mandados de prisão errados
+ *  - resultado final (solved / failed_time / failed_wrong_suspect)
  */
-export function computeScoreAndReputationImpact({
+function computeScoreAndReputationImpact({
   difficulty,
   maxTurns,
   turnsUsed,
@@ -43,16 +44,22 @@ export function computeScoreAndReputationImpact({
 
   const base = baseByDifficulty[difficulty] ?? 100
   const safeTurnsUsed = Number.isFinite(turnsUsed) ? turnsUsed : 0
+  const safeMaxTurns = Number.isFinite(maxTurns) ? maxTurns : 8
   const safeWrongTravels = Number.isFinite(wrongTravels) ? wrongTravels : 0
   const safeWrongWarrants = Number.isFinite(wrongWarrants)
     ? wrongWarrants
     : 0
-  const safeMaxTurns = Number.isFinite(maxTurns) ? maxTurns : 0
 
-  const tempoBonus = Math.max(0, safeMaxTurns - safeTurnsUsed) * 10
+  // Quanto mais rápido que o limite, maior o bônus.
+  const tempoDelta = safeMaxTurns - safeTurnsUsed
+  const tempoBonus = tempoDelta * 10
+
+  // Pequeno bônus se usou bem abaixo do limite
+  const efficiencyBonus = tempoDelta >= 2 ? 10 : 0
+
+  // Penalidades
   const penaltyWrongTravel = safeWrongTravels * 15
   const penaltyWrongWarrant = safeWrongWarrants * 50
-  const efficiencyBonus = Math.max(0, 3 - safeWrongTravels) * 5
 
   let rawScore =
     base + tempoBonus + efficiencyBonus - penaltyWrongTravel - penaltyWrongWarrant
@@ -110,24 +117,29 @@ export async function applyCaseResult({ caseId, agentId, result }) {
       throw new Error("Case não encontrado para aplicação de resultado.")
     }
 
-    // 2) Carrega progresso do case para esse agente
+    const difficulty = caseRow.difficulty || "easy"
+    const maxTurns =
+      caseRow.max_turns ?? getMaxTurnsForDifficulty(difficulty)
+
+    // 2) Carrega progresso do caso
     const [[progressRow]] = await conn.query(
       `
-      SELECT id, turns_used, wrong_travels, wrong_warrants
+      SELECT
+        id,
+        turns_used,
+        wrong_travels,
+        wrong_warrants
       FROM case_progress
-      WHERE case_id = ? AND agent_id = ?
+      WHERE case_id = ?
+        AND agent_id = ?
       FOR UPDATE
       `,
       [caseId, agentId],
     )
 
     if (!progressRow) {
-      throw new Error("Progresso do caso não encontrado para este agente.")
+      throw new Error("Progresso do caso não encontrado para aplicação de resultado.")
     }
-
-    const difficulty = caseRow.difficulty || "easy"
-    const maxTurns =
-      caseRow.max_turns || getMaxTurnsForDifficulty(difficulty)
 
     const { score, reputationDelta } = computeScoreAndReputationImpact({
       difficulty,
@@ -178,7 +190,30 @@ export async function applyCaseResult({ caseId, agentId, result }) {
     const currentSolved = agentRow.solved_cases ?? 0
     const currentFailed = agentRow.failed_cases ?? 0
 
-    const newXp = currentXp + score
+    // Ganho de XP deste caso, levando em conta reputação e histórico de falhas.
+    // A ideia é: casos resolvidos sempre geram algum XP, mas agentes com
+    // muitas falhas ou reputação baixa ganham menos por operação.
+    const totalCases = currentSolved + currentFailed
+    const failureRatio =
+      totalCases > 0 ? currentFailed / totalCases : 0
+
+    let xpMultiplier = 1
+    let xpGain = 0
+
+    if (result === "solved") {
+      // Penaliza agentes com reputação baixa ou muitas falhas acumuladas.
+      if (currentReputation < 30 || failureRatio >= 0.5) {
+        xpMultiplier = 0.5
+      } else if (currentReputation < 50 || failureRatio >= 0.35) {
+        xpMultiplier = 0.75
+      }
+      xpGain = Math.round(score * xpMultiplier)
+    } else {
+      // Casos falhos não geram XP, apenas impacto de reputação.
+      xpGain = 0
+    }
+
+    const newXp = currentXp + xpGain
     let newReputation = currentReputation + reputationDelta
     newReputation = Math.max(0, Math.min(100, newReputation))
 
@@ -202,6 +237,7 @@ export async function applyCaseResult({ caseId, agentId, result }) {
 
     return {
       score,
+      xpGain,
       reputationDelta,
       newXp,
       newReputation,

@@ -2,11 +2,8 @@
   <div class="space-y-6">
     <header class="flex items-start justify-between gap-4">
       <div class="space-y-1">
-        <button
-          type="button"
-          class="text-xs text-slate-400 hover:text-slate-200 mb-1 inline-flex items-center gap-1"
-          @click="goBack"
-        >
+        <button type="button" class="text-xs text-slate-400 hover:text-slate-200 mb-1 inline-flex items-center gap-1"
+          @click="goBack">
           <span>←</span>
           <span>Voltar para casos</span>
         </button>
@@ -16,8 +13,9 @@
         </h1>
 
         <p class="text-sm text-slate-300 max-w-2xl">
-          {{ caseData?.summary || caseData?.description || "Acompanhe o progresso desta investigação, analise as pistas coletadas e decida o melhor momento para emitir o mandado de prisão." }}
-        </p>
+  {{ caseData?.summary || caseData?.description || "Acompanhe o progresso desta investigação, analise as pistas coletadas e decida o melhor momento para emitir o mandado de prisão." }}
+</p>
+
 
         <p v-if="caseData" class="text-xs text-slate-400">
           Dificuldade:
@@ -45,11 +43,7 @@
     <div v-else class="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
       <!-- Coluna esquerda: situação atual + ações -->
       <div class="space-y-4">
-        <InfoSectionCard
-          title="Situação atual"
-          :subtitle="currentStepSubtitle"
-          :badge="stepBadge"
-        >
+        <InfoSectionCard title="Situação atual" :subtitle="currentStepSubtitle" :badge="stepBadge">
           <div v-if="currentStep" class="space-y-3 text-sm">
             <p class="text-slate-200">
               <span class="text-slate-400">Local:</span>
@@ -66,10 +60,8 @@
           </div>
         </InfoSectionCard>
 
-        <InfoSectionCard
-          title="Ações do agente"
-          subtitle="Use com cuidado. Cada avanço pode aproximar ou afastar do culpado."
-        >
+        <InfoSectionCard title="Ações do agente"
+          subtitle="Use com cuidado. Cada avanço pode aproximar ou afastar do culpado.">
           <div class="space-y-3 text-sm">
             <p class="text-slate-300">
               Avançar a investigação consome um passo definido pelo sistema. Em versões futuras,
@@ -77,12 +69,9 @@
             </p>
 
             <div class="flex flex-wrap gap-3">
-              <button
-                type="button"
+              <button type="button"
                 class="inline-flex items-center justify-center rounded-lg bg-sky-600 hover:bg-sky-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed"
-                :disabled="!canAdvance"
-                @click="onNextStep"
-              >
+                :disabled="!canAdvance" @click="onNextStep">
                 <span v-if="actionLoading">
                   Avançando investigação...
                 </span>
@@ -94,12 +83,9 @@
                 </span>
               </button>
 
-              <button
-                type="button"
+              <button type="button"
                 class="inline-flex items-center justify-center rounded-lg border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-200 transition disabled:opacity-60 disabled:cursor-not-allowed"
-                :disabled="!canIssueWarrant || actionLoading"
-                @click="openWarrantModal"
-              >
+                :disabled="!canIssueWarrant || actionLoading" @click="openWarrantModal">
                 Emitir mandado de prisão
               </button>
             </div>
@@ -114,22 +100,15 @@
 
       <!-- Coluna direita: pistas + suspeitos -->
       <div class="space-y-4">
-        <InfoSectionCard
-          title="Pistas coletadas"
-          :subtitle="cluesSubtitle"
-          :badge="cluesBadge"
-        >
+        <InfoSectionCard title="Pistas coletadas" :subtitle="cluesSubtitle" :badge="cluesBadge">
           <div v-if="clues.length === 0" class="text-sm text-slate-300">
             Nenhuma pista coletada ainda. Avance a investigação para descobrir novas informações
             sobre o caso, o vilão e possíveis rotas de fuga.
           </div>
 
           <ul v-else class="space-y-2">
-            <li
-              v-for="(clue, index) in clues"
-              :key="clue.id || `${clue.attribute_name}-${index}`"
-              class="border border-slate-700/80 bg-slate-900/70 rounded-lg px-3 py-2 text-xs md:text-sm"
-            >
+            <li v-for="(clue, index) in clues" :key="clue.id || `${clue.attribute_name}-${index}`"
+              class="border border-slate-700/80 bg-slate-900/70 rounded-lg px-3 py-2 text-xs md:text-sm">
               <p class="text-[11px] uppercase tracking-wide text-slate-400">
                 {{ clue.attribute_name || "Pista" }}
                 <span v-if="clue.step_number || clue.step_order" class="ml-1">
@@ -143,30 +122,20 @@
           </ul>
         </InfoSectionCard>
 
-        <InfoSectionCard
-          title="Suspeitos identificados"
-          :subtitle="suspectsSubtitle"
-          :badge="suspectsBadge"
-        >
+        <InfoSectionCard title="Suspeitos identificados" :subtitle="suspectsSubtitle" :badge="suspectsBadge">
           <div v-if="suspects.length === 0" class="text-sm text-slate-300">
             Nenhum suspeito foi identificado com segurança até o momento. Continue coletando pistas
             para afunilar a investigação.
           </div>
 
           <div v-else class="space-y-2">
-            <article
-              v-for="sus in suspects"
-              :key="sus.id"
-              class="border border-slate-700/80 bg-slate-900/70 rounded-lg px-3 py-2 text-xs md:text-sm flex flex-col gap-1"
-            >
+            <article v-for="sus in suspects" :key="sus.id"
+              class="border border-slate-700/80 bg-slate-900/70 rounded-lg px-3 py-2 text-xs md:text-sm flex flex-col gap-1">
               <header class="flex items-center justify-between gap-2">
                 <h3 class="font-semibold text-slate-50">
                   {{ sus.name || "Suspeito desconhecido" }}
                 </h3>
-                <p
-                  v-if="sus.codename"
-                  class="text-[11px] text-sky-300 uppercase tracking-wide"
-                >
+                <p v-if="sus.codename" class="text-[11px] text-sky-300 uppercase tracking-wide">
                   {{ sus.codename }}
                 </p>
               </header>
@@ -188,13 +157,8 @@
       </div>
     </div>
 
-    <WarrantModal
-      v-if="showWarrant"
-      :case-id="caseId"
-      :suspects="suspects"
-      @close="showWarrant = false"
-      @completed="onWarrantCompleted"
-    />
+    <WarrantModal v-if="showWarrant" :case-id="caseId" :suspects="suspects" @close="showWarrant = false"
+      @completed="onWarrantCompleted" />
   </div>
 </template>
 
@@ -284,6 +248,16 @@ const suspectsSubtitle = computed(() => {
 
 const canAdvance = computed(() => !reachedEnd.value && !actionLoading.value)
 
+function normalizeSuspects(apiSuspects) {
+  return (apiSuspects || []).map((s) => ({
+    ...s,
+    name: s.name_snapshot || s.name || "Suspeito desconhecido",
+    occupation: s.occupation_snapshot || s.occupation || null,
+    vehicle: s.vehicle_snapshot || s.vehicle || null,
+    feature: s.feature_snapshot || s.feature || null,
+  }))
+}
+
 async function loadStatus() {
   loading.value = true
   error.value = ""
@@ -294,7 +268,7 @@ async function loadStatus() {
     currentStep.value = status.currentStep || null
     progress.value = status.progress || null
     clues.value = status.clues || []
-    suspects.value = status.suspects || []
+    suspects.value = normalizeSuspects(status.suspects)
     canIssueWarrant.value = !!status.canIssueWarrant
     reachedEnd.value = !!status.reachedEnd
   } catch (err) {

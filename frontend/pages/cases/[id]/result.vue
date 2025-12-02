@@ -1,11 +1,8 @@
 <template>
   <div class="space-y-6">
     <header class="space-y-2">
-      <button
-        type="button"
-        class="text-xs text-slate-400 hover:text-slate-200 mb-1 inline-flex items-center gap-1"
-        @click="goBack"
-      >
+      <button type="button" class="text-xs text-slate-400 hover:text-slate-200 mb-1 inline-flex items-center gap-1"
+        @click="goBack">
         <span>←</span>
         <span>Voltar para casos</span>
       </button>
@@ -35,11 +32,7 @@
     </div>
 
     <div v-else class="space-y-5">
-      <InfoSectionCard
-        title="Resumo do caso"
-        :badge="statusBadge"
-        :subtitle="statusText"
-      >
+      <InfoSectionCard title="Resumo do caso" :badge="statusBadge" :subtitle="statusText">
         <div class="space-y-2 text-sm">
           <p class="text-slate-300">
             <span class="text-slate-400">Título:</span>
@@ -70,10 +63,7 @@
         </div>
       </InfoSectionCard>
 
-      <InfoSectionCard
-        title="Desempenho operacional"
-        subtitle="Dados consolidados desta operação"
-      >
+      <InfoSectionCard title="Desempenho operacional" subtitle="Dados consolidados desta operação">
         <div class="grid gap-4 md:grid-cols-3 text-sm">
           <div class="space-y-1">
             <p class="text-xs text-slate-400 uppercase tracking-wide">
@@ -104,10 +94,7 @@
         </div>
       </InfoSectionCard>
 
-      <InfoSectionCard
-        title="Pistas e suspeitos"
-        subtitle="Resumo do que foi consolidado ao final do caso"
-      >
+      <InfoSectionCard title="Pistas e suspeitos" subtitle="Resumo do que foi consolidado ao final do caso">
         <div class="grid gap-4 md:grid-cols-2 text-sm">
           <div>
             <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wide mb-1">
@@ -118,11 +105,8 @@
               antes da coleta consolidada ou que o backend ainda não está retornando o histórico completo.
             </div>
             <ul v-else class="space-y-1 text-xs">
-              <li
-                v-for="(clue, idx) in clues"
-                :key="clue.id || idx"
-                class="border border-slate-700/80 bg-slate-900/70 rounded px-2 py-1"
-              >
+              <li v-for="(clue, idx) in clues" :key="clue.id || idx"
+                class="border border-slate-700/80 bg-slate-900/70 rounded px-2 py-1">
                 <p class="text-[11px] text-slate-400">
                   {{ clue.attribute_name || "Pista" }}
                 </p>
@@ -142,11 +126,8 @@
               lista de suspeitos da rota de status.
             </div>
             <ul v-else class="space-y-1 text-xs">
-              <li
-                v-for="sus in suspects"
-                :key="sus.id"
-                class="border border-slate-700/80 bg-slate-900/70 rounded px-2 py-1"
-              >
+              <li v-for="sus in suspects" :key="sus.id"
+                class="border border-slate-700/80 bg-slate-900/70 rounded px-2 py-1">
                 <p class="text-slate-200 font-semibold">
                   {{ sus.name || "Suspeito" }}
                   <span v-if="sus.codename" class="text-[10px] text-sky-300 ml-1">
@@ -168,11 +149,9 @@
       </InfoSectionCard>
 
       <div class="pt-2">
-        <button
-          type="button"
+        <button type="button"
           class="inline-flex items-center justify-center rounded-lg bg-sky-600 hover:bg-sky-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition"
-          @click="goBack"
-        >
+          @click="goBack">
           Voltar para lista de casos
         </button>
       </div>
@@ -186,6 +165,7 @@ import { useRoute, useRouter } from "vue-router"
 import InfoSectionCard from "@/components/InfoSectionCard.vue"
 import { getCaseStatus } from "@/services/gameApi"
 
+
 const route = useRoute()
 const router = useRouter()
 
@@ -196,6 +176,16 @@ const error = ref("")
 const caseData = ref(null)
 const clues = ref([])
 const suspects = ref([])
+
+function normalizeSuspects(apiSuspects) {
+  return (apiSuspects || []).map((s) => ({
+    ...s,
+    name: s.name_snapshot || s.name || "Suspeito",
+    occupation: s.occupation_snapshot || s.occupation || null,
+    vehicle: s.vehicle_snapshot || s.vehicle || null,
+    feature: s.feature_snapshot || s.feature || null,
+  }))
+}
 
 const statusBadge = computed(() => {
   if (!caseData.value?.status) return ""
@@ -285,7 +275,8 @@ async function loadResult() {
     const status = await getCaseStatus(caseId, 1)
     caseData.value = status.case || null
     clues.value = status.clues || []
-    suspects.value = status.suspects || []
+    suspects.value = normalizeSuspects(status.suspects)
+
   } catch (err) {
     error.value = err.message || "Erro ao carregar resultado do caso."
   } finally {

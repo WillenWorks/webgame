@@ -1,12 +1,27 @@
 <template>
   <div class="space-y-6">
     <header class="space-y-2">
+      <button
+        type="button"
+        class="text-xs text-slate-400 hover:text-slate-200 mb-1 inline-flex items-center gap-1"
+        @click="goBackHome"
+      >
+        <span>←</span>
+        <span>Voltar à central de operações</span>
+      </button>
+
       <h1 class="text-2xl font-bold">
         Casos disponíveis
       </h1>
       <p class="text-sm text-slate-300 max-w-2xl">
-        Escolha um caso para investigar. Cada caso é gerado dinamicamente com base na base
-        de vilões e locais cadastrados no sistema da IGI.
+        {{ headerDescription }}
+      </p>
+
+      <p v-if="profileLoading" class="text-xs text-slate-500">
+        Carregando perfil do agente...
+      </p>
+      <p v-else-if="profileError" class="text-xs text-red-400">
+        {{ profileError }}
       </p>
     </header>
 
@@ -16,12 +31,12 @@
       :badge="casesBadge"
     >
       <template #default>
-        <div v-if="loading" class="text-slate-300 text-sm">
+        <div v-if="casesLoading" class="text-slate-300 text-sm">
           Carregando casos...
         </div>
 
-        <div v-else-if="error" class="text-sm text-red-400">
-          {{ error }}
+        <div v-else-if="casesError" class="text-sm text-red-400">
+          {{ casesError }}
         </div>
 
         <div v-else-if="cases.length === 0" class="text-sm text-slate-300">
@@ -41,7 +56,11 @@
                   {{ c.title || `Caso #${c.id}` }}
                 </h2>
                 <p class="text-xs md:text-sm text-slate-300">
-                  {{ c.summary || c.description || "Caso sem resumo detalhado. Ideal para testes de fluxo." }}
+                  {{
+                    c.summary ||
+                    c.description ||
+                    "Caso sem resumo detalhado. Ideal para testes de fluxo."
+                  }}
                 </p>
               </div>
 
@@ -63,7 +82,7 @@
 
             <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800 mt-2">
               <p class="text-xs text-slate-400">
-                Duração estimada: curta · Investigação linear com passos definidos.
+                {{ footerDescription }}
               </p>
 
               <button
@@ -81,6 +100,9 @@
                 <span v-else-if="c.status === 'solved'">
                   Revisar caso
                 </span>
+                <span v-else-if="isRestrictedPosition">
+                  Assumir missão designada
+                </span>
                 <span v-else>
                   Iniciar investigação
                 </span>
@@ -97,24 +119,55 @@
 import { ref, computed, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import InfoSectionCard from "@/components/InfoSectionCard.vue"
-import { getAvailableCases, startCase } from "@/services/gameApi"
+import {
+  getAvailableCases,
+  startCase,
+  getAgentProfile,
+} from "@/services/gameApi"
 
 const router = useRouter()
 
+const profile = ref(null)
+const profileLoading = ref(false)
+const profileError = ref("")
+
 const cases = ref([])
-const loading = ref(false)
-const error = ref("")
+const casesLoading = ref(false)
+const casesError = ref("")
 const startingId = ref(null)
+
+const isRestrictedPosition = computed(() => {
+  const r = profile.value?.rank
+  if (!r) return true
+  const rl = String(r).toLowerCase()
+  return rl === "trainee" || rl === "field_agent"
+})
+
+const headerDescription = computed(() => {
+  if (isRestrictedPosition.value) {
+    return "Neste estágio da sua carreira, a IGI designa as operações mais adequadas ao seu nível. Concentre-se em concluir bem a missão designada."
+  }
+  return "Você possui autonomia para escolher quais casos assumir. Avalie as missões disponíveis e selecione aquela que deseja investigar."
+})
+
+const footerDescription = computed(() => {
+  if (isRestrictedPosition.value) {
+    return "Missão designada automaticamente pela IGI de acordo com seu nível atual."
+  }
+  return "Missão gerada dinamicamente com base na galeria de vilões e locais cadastrados."
+})
 
 const casesBadge = computed(() => {
   if (!cases.value.length) return ""
   return `${cases.value.length} caso${cases.value.length > 1 ? "s" : ""}`
 })
 
-const casesSubtitle = computed(
-  () =>
-    "A lista abaixo mostra os casos que o seu agente pode assumir neste momento."
-)
+const casesSubtitle = computed(() => {
+  if (isRestrictedPosition.value) {
+    return "Abaixo está a missão que a agência designou para você. Finalize-a para evoluir em cargo e reputação."
+  }
+  return "Lista de casos disponíveis para seu agente assumir neste momento."
+})
 
 function difficultyLabel(diff) {
   if (!diff) return "Dificuldade indefinida"
@@ -166,21 +219,39 @@ function statusPillClass(status) {
   return "bg-slate-700/40 text-slate-200 border border-slate-500/50"
 }
 
+function goBackHome() {
+  router.push("/")
+}
+
+async function loadProfile() {
+  profileLoading.value = true
+  profileError.value = ""
+  try {
+    const data = await getAgentProfile(1)
+    profile.value = data
+  } catch (err) {
+    profileError.value =
+      err.message || "Erro ao carregar perfil do agente."
+  } finally {
+    profileLoading.value = false
+  }
+}
+
 async function loadCases() {
-  loading.value = true
-  error.value = ""
+  casesLoading.value = true
+  casesError.value = ""
   try {
     const data = await getAvailableCases(1)
     cases.value = data || []
   } catch (err) {
-    error.value = err.message || "Erro ao carregar casos."
+    casesError.value = err.message || "Erro ao carregar casos."
   } finally {
-    loading.value = false
+    casesLoading.value = false
   }
 }
 
 async function handleStartCase(caseId, status) {
-  error.value = ""
+  casesError.value = ""
   startingId.value = caseId
 
   try {
@@ -193,13 +264,14 @@ async function handleStartCase(caseId, status) {
     await startCase(caseId, 1)
     router.push(`/cases/${caseId}/investigate`)
   } catch (err) {
-    error.value = err.message || "Erro ao iniciar caso."
+    casesError.value = err.message || "Erro ao iniciar caso."
   } finally {
     startingId.value = null
   }
 }
 
-onMounted(() => {
-  loadCases()
+onMounted(async () => {
+  await loadProfile()
+  await loadCases()
 })
 </script>
