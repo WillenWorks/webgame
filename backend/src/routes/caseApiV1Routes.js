@@ -327,18 +327,36 @@ router.post("/cases/:caseId/warrant", async (req, res) => {
       });
     }
 
+    // --- Regra: só pode emitir mandado se houver evidência suficiente ---
+    const status = await getCaseInvestigationStatus(caseId, agentId);
+
+    if (!status?.canIssueWarrant) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "Ainda não há informações suficientes para emitir um mandado de prisão. Continue investigando e coletando mais pistas.",
+        data: {
+          reason: "not_enough_evidence",
+          progress: status?.progress || null,
+          cluesCount:
+            status?.progress?.cluesCount ??
+            (Array.isArray(status?.clues) ? status.clues.length : 0),
+        },
+      });
+    }
+
     const [[suspectRow]] = await pool.query(
       `
-  SELECT
-    id,
-    case_id,
-    villain_template_id,
-    is_guilty,
-    name_snapshot
-  FROM case_suspects
-  WHERE id = ?
-    AND case_id = ?
-  `,
+      SELECT
+        id,
+        case_id,
+        villain_template_id,
+        is_guilty,
+        name_snapshot
+      FROM case_suspects
+      WHERE id = ?
+        AND case_id = ?
+      `,
       [suspectId, caseId]
     );
 

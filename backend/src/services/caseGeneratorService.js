@@ -91,19 +91,28 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
     // 6) Cria case_steps + registra mapeamento
     const stepMap = new Map();
 
+    const totalSteps = structure.steps?.length || 0;
+
     for (const step of structure.steps) {
+      // fallback de local: se a IA não trouxe location_id,
+      // usamos a lista de locations sorteada no início
+      const fallbackLocation =
+        locations[(step.order - 1) % locations.length] || locations[0];
+
+      const toLocationId = step.location_id ?? fallbackLocation.id;
+
       const [stepInsert] = await conn.query(
         `
-        INSERT INTO case_steps (
-          case_id,
-          step_order,
-          step_type,
-          to_location_id,
-          description
-        )
-        VALUES (?, ?, ?, ?, ?)
-        `,
-        [caseId, step.order, step.type, step.location_id, step.description]
+    INSERT INTO case_steps (
+      case_id,
+      step_order,
+      step_type,
+      to_location_id,
+      description
+    )
+    VALUES (?, ?, ?, ?, ?)
+    `,
+        [caseId, step.order, step.type, toLocationId, step.description]
       );
 
       stepMap.set(step.id, stepInsert.insertId);
@@ -111,22 +120,54 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
 
     // 7) Cria pistas do vilão (case_villain_clues)
     if (structure.villain_clues && structure.villain_clues.length > 0) {
+      // Usa as pistas vindas da IA
       for (const clue of structure.villain_clues) {
         const stepDbId = clue.step_ref ? stepMap.get(clue.step_ref) : null;
 
         await conn.query(
           `
-          INSERT INTO case_villain_clues (
-            case_id,
-            step_id,
-            attribute_name,
-            attribute_value
-          )
-          VALUES (?, ?, ?, ?)
-          `,
+      INSERT INTO case_villain_clues (
+        case_id,
+        step_id,
+        attribute_name,
+        attribute_value
+      )
+      VALUES (?, ?, ?, ?)
+      `,
           [caseId, stepDbId, clue.attribute_name, clue.attribute_value]
         );
       }
+    } else {
+      // Fallback: gera pistas básicas a partir dos atributos do vilão culpado
+      const baseClues = [
+        { name: "hair_color", value: guiltyVillain.hair_color },
+        { name: "occupation", value: guiltyVillain.occupation },
+        { name: "hobby", value: guiltyVillain.hobby },
+        { name: "vehicle", value: guiltyVillain.vehicle },
+        { name: "feature", value: guiltyVillain.feature },
+      ].filter((c) => c.value);
+
+      const stepIds = Array.from(stepMap.values());
+
+      baseClues.forEach(async (clue, index) => {
+        if (!stepIds.length) return;
+
+        // distribui em steps diferentes, na ordem
+        const stepDbId = stepIds[Math.min(index, stepIds.length - 1)];
+
+        await conn.query(
+          `
+      INSERT INTO case_villain_clues (
+        case_id,
+        step_id,
+        attribute_name,
+        attribute_value
+      )
+      VALUES (?, ?, ?, ?)
+      `,
+          [caseId, stepDbId, clue.name, clue.value]
+        );
+      });
     }
 
     // 8) Cria suspeitos (case_suspects) – 1 real + 9 falsos
@@ -364,9 +405,14 @@ export async function startCaseForAgent(caseId, agentId) {
  *  - progresso (current/total)
  *  - pistas (case_villain_clues)
  *  - lista de suspeitos (case_suspects)
+ *  - regra de quando pode emitir mandado
  */
 export async function getCaseInvestigationStatus(caseId, agentId) {
   const pool = getDbPool();
+
+  // Parametrização básica da regra de evidência
+  const MIN_STEPS_FOR_WARRANT = 3;
+  const MIN_CLUES_FOR_WARRANT = 3;
 
   // 1) Carrega o caso para esse agente
   const [caseRows] = await pool.query(
@@ -462,11 +508,24 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
 
   const suspects = suspectsRows || [];
 
-  // 7) Pode emitir mandado?
+  // ---- Regra reforçada de emissão de mandado ----
+  const completedSteps =
+    totalSteps === 0
+      ? 0
+      : Math.max(0, Math.min(currentStepOrder - 1, totalSteps));
+  const cluesCount = clueRows.length;
+  const reachedEnd = totalSteps > 0 && currentStepOrder >= totalSteps;
+  const hasAnyClue = cluesCount > 0;
+
+  // Regra:
+  // - caminho "padrão": mínimo de passos + mínimo de pistas
+  // - fallback: se chegou no fim do caso, libera mesmo que não tenha pistas (para não travar)
   const canIssueWarrant =
     caseData.status === "in_progress" &&
     totalSteps > 0 &&
-    currentStepOrder >= totalSteps;
+    ((completedSteps >= MIN_STEPS_FOR_WARRANT &&
+      cluesCount >= MIN_CLUES_FOR_WARRANT) ||
+      reachedEnd);
 
   // 8) Monta o objeto de status pra API
   return {
@@ -483,6 +542,13 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
     progress: {
       current: totalSteps === 0 ? 0 : currentStepOrder,
       total: totalSteps,
+      completedSteps,
+      cluesCount,
+      minStepsForWarrant: MIN_STEPS_FOR_WARRANT,
+      minCluesForWarrant: MIN_CLUES_FOR_WARRANT,
+      canIssueWarrant,
+      reachedEnd,
+      hasAnyClue,
     },
     clues: clueRows,
     suspects,
