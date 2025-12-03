@@ -11,12 +11,70 @@ function shuffle(array) {
     .map(({ value }) => value);
 }
 
+// normaliza os nomes de atributos vindos da IA
+function mapAttributeName(raw) {
+  if (!raw) return null;
+  const n = String(raw).toLowerCase().trim();
+
+  if (["hair", "hair_color", "cabelo", "cor_do_cabelo"].includes(n))
+    return "hair_color";
+
+  if (["vehicle", "car", "veiculo", "veículo"].includes(n)) return "vehicle";
+
+  if (["hobby", "hobbie"].includes(n)) return "hobby";
+
+  if (["occupation", "job", "profissao", "profissão"].includes(n))
+    return "occupation";
+
+  if (
+    ["feature", "caracteristica", "característica", "trait", "characteristic"].includes(
+      n
+    )
+  )
+    return "feature";
+
+  if (["sex", "gender", "sexo"].includes(n)) return "sex";
+
+  return n;
+}
+
+function getVillainAttributeValue(villain, attributeName) {
+  switch (attributeName) {
+    case "hair_color":
+      return villain.hair_color;
+    case "vehicle":
+      return villain.vehicle;
+    case "hobby":
+      return villain.hobby;
+    case "occupation":
+      return villain.occupation;
+    case "feature":
+      return villain.feature;
+    case "sex":
+      return villain.sex;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Gera um identificador estável de localidade dentro do caso.
+ * Não precisa ser globalmente único, só consistente por case/step/ordem.
+ */
+function buildLocationUid(caseId, stepOrder, index) {
+  return `case-${caseId}-step-${stepOrder}-loc-${index + 1}`;
+}
+
 /**
  * Cria um caso para um agente:
+ * - busca rank e reputação do agente
  * - escolhe 1 vilão culpado
  * - escolhe 9 vilões falsos
- * - gera steps a partir do LLM
- * - cria relação de pistas (case_villain_clues)
+ * - gera steps a partir do LLM (considerando rank/reputação)
+ * - cria steps com local (case_steps)
+ * - cria opções de viagem e locais por step (case_travel_options, case_step_locations)
+ * - cria NPCs por step (case_step_npcs) e por localidade (case_location_npcs)
+ * - cria relação de pistas (case_villain_clues) a partir dos steps da IA
  * - cria suspects (case_suspects)
  */
 export async function createCaseForAgent(agentId, difficulty = "easy") {
@@ -25,6 +83,26 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
 
   try {
     await conn.beginTransaction();
+
+    // 0) Busca info do agente (xp + reputação) para rank / IA
+    const [[agentRow]] = await conn.query(
+      `
+      SELECT id, xp, reputation
+      FROM agents
+      WHERE id = ?
+      `,
+      [agentId]
+    );
+
+    if (!agentRow) {
+      throw new Error(
+        "Agente não encontrado ao tentar criar caso (createCaseForAgent)."
+      );
+    }
+
+    const xp = agentRow.xp ?? 0;
+    const reputation = agentRow.reputation ?? 50;
+    const agentRank = determineAgentPositionByXp(xp);
 
     // 1) Busca vilões ativos
     const [villains] = await conn.query(
@@ -56,11 +134,13 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
       throw new Error("Nenhum local encontrado para gerar um caso.");
     }
 
-    // 4) Usa LLM pra gerar estrutura do caso
+    // 4) Usa LLM pra gerar estrutura do caso (já considerando rank e reputação)
     const structure = await generateCarmenCaseStructure({
       villain: guiltyVillain,
       locations,
       difficulty,
+      agentRank,
+      agentReputation: reputation,
     });
 
     // 5) Cria o case
@@ -88,52 +168,259 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
 
     const caseId = caseInsert.insertId;
 
-    // 6) Cria case_steps + registra mapeamento
+    // 6) Cria case_steps + registra mapeamento (step_order -> step_id)
     const stepMap = new Map();
-
     const totalSteps = structure.steps?.length || 0;
 
     for (const step of structure.steps) {
-      // fallback de local: se a IA não trouxe location_id,
-      // usamos a lista de locations sorteada no início
-      const fallbackLocation =
-        locations[(step.order - 1) % locations.length] || locations[0];
+      const stepOrder = step.order;
 
-      const toLocationId = step.location_id ?? fallbackLocation.id;
+      // tenta casar step.location com algum location.name do banco
+      let toLocationId = null;
+
+      if (step.location) {
+        const lower = String(step.location).toLowerCase().trim();
+        const match = locations.find(
+          (loc) => String(loc.name).toLowerCase().trim() === lower
+        );
+        if (match) {
+          toLocationId = match.id;
+        }
+      }
+
+      // fallback: se não casar, usa o location sorteado pelo índice
+      if (!toLocationId) {
+        const fallbackLocation =
+          locations[(stepOrder - 1) % locations.length] || locations[0];
+        toLocationId = fallbackLocation.id;
+      }
 
       const [stepInsert] = await conn.query(
         `
-    INSERT INTO case_steps (
-      case_id,
-      step_order,
-      step_type,
-      to_location_id,
-      description
-    )
-    VALUES (?, ?, ?, ?, ?)
-    `,
-        [caseId, step.order, step.type, toLocationId, step.description]
+        INSERT INTO case_steps (
+          case_id,
+          step_order,
+          step_type,
+          to_location_id,
+          description
+        )
+        VALUES (?, ?, ?, ?, ?)
+        `,
+        [caseId, stepOrder, step.type, toLocationId, step.description]
       );
 
-      stepMap.set(step.id, stepInsert.insertId);
+      stepMap.set(stepOrder, stepInsert.insertId);
     }
 
-    // 7) Cria pistas do vilão (case_villain_clues)
-    if (structure.villain_clues && structure.villain_clues.length > 0) {
-      // Usa as pistas vindas da IA
-      for (const clue of structure.villain_clues) {
-        const stepDbId = clue.step_ref ? stepMap.get(clue.step_ref) : null;
+    // 6b) Grava opções de viagem, locais de pista e NPCs por step / localidade
+    if (Array.isArray(structure.steps)) {
+      for (const step of structure.steps) {
+        const stepOrder = step.order;
+
+        // 6b.1) Opções de país para viagem (case_travel_options)
+        if (
+          step.country_correct &&
+          Array.isArray(step.country_options) &&
+          step.country_options.length > 0
+        ) {
+          const correctCountry = String(step.country_correct).toLowerCase().trim();
+          const uniqueCountries = [...new Set(step.country_options)];
+
+          for (const countryNameRaw of uniqueCountries) {
+            const countryName = String(countryNameRaw).trim();
+            if (!countryName) continue;
+
+            const isCorrect =
+              countryName.toLowerCase().trim() === correctCountry ? 1 : 0;
+
+            await conn.query(
+              `
+              INSERT INTO case_travel_options (
+                case_id,
+                step_order,
+                country_name,
+                is_correct_country
+              )
+              VALUES (?, ?, ?, ?)
+              `,
+              [caseId, stepOrder, countryName, isCorrect]
+            );
+          }
+        }
+
+        // 6b.2) Locais dentro do país (case_step_locations) + NPC por local (case_location_npcs)
+        if (Array.isArray(step.locations_in_country)) {
+          let locationIndex = 0;
+
+          for (const place of step.locations_in_country) {
+            const countryName = step.country_correct || null;
+            const placeName = place.name || null;
+            const placeType = place.place_type || null;
+            const role = place.role || "empty";
+            const clueText = place.clue_text || null;
+            const suspectAttr = mapAttributeName(place.suspect_attribute) || null;
+
+            const isDummy = place.is_dummy ? 1 : 0;
+            const locationUid = buildLocationUid(caseId, stepOrder, locationIndex);
+
+            const [locationInsert] = await conn.query(
+              `
+              INSERT INTO case_step_locations (
+                case_id,
+                step_order,
+                country_name,
+                place_name,
+                place_type,
+                role,
+                clue_text,
+                suspect_attribute,
+                is_dummy,
+                location_uid
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `,
+              [
+                caseId,
+                stepOrder,
+                countryName,
+                placeName,
+                placeType,
+                role,
+                clueText,
+                suspectAttr,
+                isDummy,
+                locationUid,
+              ]
+            );
+
+            const locationId = locationInsert.insertId;
+
+            // Cria NPC vinculado à localidade (case_location_npcs)
+            if (Array.isArray(step.npcs) && step.npcs.length > 0) {
+              const npc = step.npcs[locationIndex % step.npcs.length];
+
+              await conn.query(
+                `
+                INSERT INTO case_location_npcs (
+                  case_id,
+                  step_order,
+                  location_id,
+                  archetype,
+                  allegiance,
+                  attitude,
+                  dialogue_high_reputation,
+                  dialogue_neutral_reputation,
+                  dialogue_low_reputation
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `,
+                [
+                  caseId,
+                  stepOrder,
+                  locationId,
+                  npc.archetype || null,
+                  npc.allegiance || "neutral",
+                  npc.attitude || "neutral",
+                  npc.dialogue_high_reputation || null,
+                  npc.dialogue_neutral_reputation || null,
+                  npc.dialogue_low_reputation || null,
+                ]
+              );
+            }
+
+            locationIndex += 1;
+          }
+        }
+
+        // 6b.3) NPCs do step (case_step_npcs) – mantido por compatibilidade
+        if (Array.isArray(step.npcs)) {
+          for (const npc of step.npcs) {
+            await conn.query(
+              `
+              INSERT INTO case_step_npcs (
+                case_id,
+                step_order,
+                archetype,
+                allegiance,
+                attitude,
+                dialogue_high_reputation,
+                dialogue_neutral_reputation,
+                dialogue_low_reputation
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `,
+              [
+                caseId,
+                stepOrder,
+                npc.archetype || null,
+                npc.allegiance || "neutral",
+                npc.attitude || "neutral",
+                npc.dialogue_high_reputation || null,
+                npc.dialogue_neutral_reputation || null,
+                npc.dialogue_low_reputation || null,
+              ]
+            );
+          }
+        }
+      }
+    }
+
+    // 7) Cria pistas do vilão (case_villain_clues) a partir dos steps da IA
+    const villainClues = [];
+
+    if (Array.isArray(structure.steps)) {
+      for (const step of structure.steps) {
+        const stepOrder = step.order;
+
+        // 7.1) Pista em nível de step (villain_clue_attribute)
+        if (step.villain_clue_attribute) {
+          const attrName = mapAttributeName(step.villain_clue_attribute);
+          const attrValue = getVillainAttributeValue(guiltyVillain, attrName);
+          if (attrName && attrValue) {
+            villainClues.push({
+              step_order: stepOrder,
+              attribute_name: attrName,
+              attribute_value: attrValue,
+            });
+          }
+        }
+
+        // 7.2) Pistas de suspeito vindas de locations_in_country (role = suspect_clue)
+        if (Array.isArray(step.locations_in_country)) {
+          for (const place of step.locations_in_country) {
+            if (place.role !== "suspect_clue" || !place.suspect_attribute) {
+              continue;
+            }
+
+            const attrName = mapAttributeName(place.suspect_attribute);
+            const attrValue = getVillainAttributeValue(guiltyVillain, attrName);
+
+            if (attrName && attrValue) {
+              villainClues.push({
+                step_order: stepOrder,
+                attribute_name: attrName,
+                attribute_value: attrValue,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (villainClues.length > 0) {
+      for (const clue of villainClues) {
+        const stepDbId = stepMap.get(clue.step_order) || null;
 
         await conn.query(
           `
-      INSERT INTO case_villain_clues (
-        case_id,
-        step_id,
-        attribute_name,
-        attribute_value
-      )
-      VALUES (?, ?, ?, ?)
-      `,
+          INSERT INTO case_villain_clues (
+            case_id,
+            step_id,
+            attribute_name,
+            attribute_value
+          )
+          VALUES (?, ?, ?, ?)
+          `,
           [caseId, stepDbId, clue.attribute_name, clue.attribute_value]
         );
       }
@@ -149,25 +436,25 @@ export async function createCaseForAgent(agentId, difficulty = "easy") {
 
       const stepIds = Array.from(stepMap.values());
 
-      baseClues.forEach(async (clue, index) => {
-        if (!stepIds.length) return;
+      for (let index = 0; index < baseClues.length; index++) {
+        if (!stepIds.length) break;
 
-        // distribui em steps diferentes, na ordem
+        const clue = baseClues[index];
         const stepDbId = stepIds[Math.min(index, stepIds.length - 1)];
 
         await conn.query(
           `
-      INSERT INTO case_villain_clues (
-        case_id,
-        step_id,
-        attribute_name,
-        attribute_value
-      )
-      VALUES (?, ?, ?, ?)
-      `,
+          INSERT INTO case_villain_clues (
+            case_id,
+            step_id,
+            attribute_name,
+            attribute_value
+          )
+          VALUES (?, ?, ?, ?)
+          `,
           [caseId, stepDbId, clue.name, clue.value]
         );
-      });
+      }
     }
 
     // 8) Cria suspeitos (case_suspects) – 1 real + 9 falsos
@@ -257,7 +544,8 @@ export async function getAvailableCasesForAgent(agentId) {
 
   // 2) Busca casos já existentes para o agente
   const [existingCases] = await pool.query(
-    `SELECT 
+    `
+    SELECT 
        id,
        title,
        summary,
@@ -267,7 +555,8 @@ export async function getAvailableCasesForAgent(agentId) {
      FROM cases
      WHERE agent_id = ?
        AND status IN ('available', 'in_progress')
-     ORDER BY created_at DESC`,
+     ORDER BY created_at DESC
+     `,
     [agentId]
   );
 
@@ -283,7 +572,8 @@ export async function getAvailableCasesForAgent(agentId) {
     const createdCaseId = await createCaseForAgent(agentId, "easy");
 
     const [[assignedCase]] = await pool.query(
-      `SELECT 
+      `
+      SELECT 
          id,
          title,
          summary,
@@ -291,7 +581,8 @@ export async function getAvailableCasesForAgent(agentId) {
          difficulty,
          created_at
        FROM cases
-       WHERE id = ?`,
+       WHERE id = ?
+       `,
       [createdCaseId]
     );
 
@@ -317,7 +608,8 @@ export async function getAvailableCasesForAgent(agentId) {
   }
 
   const [createdCases] = await pool.query(
-    `SELECT 
+    `
+    SELECT 
        id,
        title,
        summary,
@@ -327,7 +619,8 @@ export async function getAvailableCasesForAgent(agentId) {
      FROM cases
      WHERE agent_id = ?
        AND status IN ('available', 'in_progress')
-     ORDER BY created_at DESC`,
+     ORDER BY created_at DESC
+     `,
     [agentId]
   );
 
@@ -367,8 +660,7 @@ export async function startCaseForAgent(caseId, agentId) {
       `
       SELECT id, current_step_order
       FROM case_progress
-      WHERE case_id = ?
-        AND agent_id = ?
+      WHERE case_id = ? AND agent_id = ?
       `,
       [caseId, agentId]
     );
@@ -376,12 +668,12 @@ export async function startCaseForAgent(caseId, agentId) {
     if (!progressRows || progressRows.length === 0) {
       await conn.query(
         `
-      INSERT INTO case_progress (
-        case_id,
-        agent_id
-      )
-      VALUES (?, ?)
-    `,
+        INSERT INTO case_progress (
+          case_id,
+          agent_id
+        )
+        VALUES (?, ?)
+        `,
         [caseId, agentId]
       );
     }
@@ -455,13 +747,14 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
 
   if (totalSteps > 0) {
     const [stepRows] = await pool.query(
-      `SELECT cs.*,
+      `
+      SELECT cs.*,
             l.name AS location_name
      FROM case_steps cs
      LEFT JOIN locations l ON l.id = cs.to_location_id
-     WHERE cs.case_id = ?
-       AND cs.step_order = ?
-     ORDER BY cs.step_order ASC`,
+     WHERE cs.case_id = ? AND cs.step_order = ?
+     ORDER BY cs.step_order ASC
+     `,
       [caseId, currentStepOrder]
     );
 
@@ -470,7 +763,8 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
 
   // 5) Pistas do vilão já liberadas até o step atual
   const [clueRows] = await pool.query(
-    `SELECT
+    `
+    SELECT
        cvc.id,
        cvc.step_id,
        cs.step_order,
@@ -481,13 +775,15 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
      LEFT JOIN case_steps cs ON cs.id = cvc.step_id
      WHERE cvc.case_id = ?
        AND (cs.step_order IS NULL OR cs.step_order <= ?)
-     ORDER BY cvc.created_at ASC`,
+     ORDER BY cvc.created_at ASC
+     `,
     [caseId, currentStepOrder]
   );
 
   // 6) Lista de suspeitos (snapshot de vilões pra esse caso)
   const [suspectsRows] = await pool.query(
-    `SELECT
+    `
+    SELECT
        id,
        case_id,
        villain_template_id,
@@ -502,7 +798,8 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
        other_snapshot
      FROM case_suspects
      WHERE case_id = ?
-     ORDER BY id ASC`,
+     ORDER BY id ASC
+     `,
     [caseId]
   );
 
@@ -512,9 +809,7 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
     value:
       typeof c.attribute_value === "string"
         ? c.attribute_value.toLowerCase().trim()
-        : String(c.attribute_value ?? "")
-            .toLowerCase()
-            .trim(),
+        : String(c.attribute_value ?? "").toLowerCase().trim(),
   }));
 
   function computeMatchesForSuspect(suspect) {
@@ -547,7 +842,6 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
       if (!suspectValueRaw) continue;
 
       const suspectValue = String(suspectValueRaw).toLowerCase().trim();
-
       if (!suspectValue) continue;
 
       // match simples: contém ou é igual
@@ -626,7 +920,9 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
 
 /**
  * Avança o passo da investigação:
- *  - incrementa current_step_order em case_progress
+ *  - verifica se o agente já visitou todos os locais do step (exceto steps de transição
+ *    ou steps sem locais configurados)
+ *  - se puder avançar, incrementa current_step_order em case_progress
  *  - incrementa turns_used
  *  - retorna novo status (currentStep + progress + clues + suspects)
  */
@@ -648,7 +944,7 @@ export async function advanceCaseStep(caseId, agentId) {
 
     const [steps] = await conn.query(
       `
-      SELECT id, step_order
+      SELECT id, step_order, step_type
       FROM case_steps
       WHERE case_id = ?
       ORDER BY step_order ASC
@@ -681,6 +977,69 @@ export async function advanceCaseStep(caseId, agentId) {
     let currentStepOrder = progressRow.current_step_order || 1;
     let turnsUsed = progressRow.turns_used || 0;
 
+    if (currentStepOrder < 1) currentStepOrder = 1;
+    if (totalSteps > 0 && currentStepOrder > totalSteps) {
+      currentStepOrder = totalSteps;
+    }
+
+    // Descobre o step atual e o tipo
+    const currentStepInfo = steps.find(
+      (s) => s.step_order === currentStepOrder
+    );
+    const currentStepType = currentStepInfo?.step_type || null;
+
+    // Regra de bloqueio:
+    // - se NÃO for step de transição
+    // - e existir pelo menos 1 local configurado
+    // - e o agente ainda não tiver visitado todos os locais
+    // => não avança (nem gasta turno)
+    let advanceBlocked = false;
+
+    if (totalSteps > 0 && currentStepType !== "transition") {
+      const [[totalLocationsRow]] = await conn.query(
+        `
+        SELECT COUNT(*) AS total
+        FROM case_step_locations
+        WHERE case_id = ?
+          AND step_order = ?
+        `,
+        [caseId, currentStepOrder]
+      );
+
+      const totalLocations = totalLocationsRow?.total || 0;
+
+      if (totalLocations > 0) {
+        const [[visitedCountRow]] = await conn.query(
+          `
+          SELECT COUNT(DISTINCT location_id) AS visited
+          FROM case_step_visits
+          WHERE case_id = ?
+            AND agent_id = ?
+            AND step_order = ?
+          `,
+          [caseId, agentId, currentStepOrder]
+        );
+
+        const visitedCount = visitedCountRow?.visited || 0;
+
+        if (visitedCount < totalLocations) {
+          advanceBlocked = true;
+        }
+      }
+    }
+
+    if (advanceBlocked) {
+      // Não altera progresso, não gasta turno – apenas retorna status atual
+      await conn.commit();
+      const status = await getCaseInvestigationStatus(caseId, agentId);
+      return {
+        ...status,
+        reachedEnd: status.progress.current >= status.progress.total,
+        advanceBlocked: true,
+      };
+    }
+
+    // Se não bloqueou, pode avançar normalmente
     // Avança step (mas não passa do total)
     if (currentStepOrder < totalSteps) {
       currentStepOrder += 1;
@@ -704,6 +1063,7 @@ export async function advanceCaseStep(caseId, agentId) {
     return {
       ...status,
       reachedEnd: status.progress.current >= status.progress.total,
+      advanceBlocked: false,
     };
   } catch (err) {
     await conn.rollback();
