@@ -20,6 +20,39 @@ const client = new OpenAI({
  * @param {Array} input.locations - lista de locais do banco (ou subset)
  * @param {String} input.difficulty - easy/medium/hard
  */
+
+function extractJsonFromText(text) {
+  if (typeof text !== "string") {
+    return text
+  }
+
+  let cleaned = text.trim()
+
+  // Se vier em bloco de código ```json ... ```
+  if (cleaned.startsWith("```")) {
+    // corta a primeira linha (```json ou ```)
+    const firstNewline = cleaned.indexOf("\n")
+    if (firstNewline !== -1) {
+      cleaned = cleaned.slice(firstNewline + 1)
+    }
+    // remove o ``` final, se existir
+    const lastFence = cleaned.lastIndexOf("```")
+    if (lastFence !== -1) {
+      cleaned = cleaned.slice(0, lastFence)
+    }
+  }
+
+  // Garante que pegamos só o trecho entre o primeiro '{' e o último '}'
+  const firstBrace = cleaned.indexOf("{")
+  const lastBrace = cleaned.lastIndexOf("}")
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+  }
+
+  return cleaned.trim()
+}
+
 export async function generateCarmenCaseStructure(input) {
   const { villain, locations, difficulty } = input
 
@@ -86,10 +119,11 @@ Regras importantes:
       temperature: 0.7,
     })
 
-    const content = response.choices[0].message.content
+    const content = response.choices[0].message.content ?? ""
 
     try {
-      const parsed = JSON.parse(content)
+      const cleaned = extractJsonFromText(content)
+      const parsed = JSON.parse(cleaned)
       return parsed
     } catch (err) {
       console.error("Erro ao parsear JSON retornado pela IA:", err)

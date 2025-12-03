@@ -2,11 +2,8 @@
   <div class="space-y-6">
     <header class="flex items-start justify-between gap-4">
       <div class="space-y-1">
-        <button
-          type="button"
-          class="text-xs text-slate-400 hover:text-slate-200 mb-1 inline-flex items-center gap-1"
-          @click="goBack"
-        >
+        <button type="button" class="text-xs text-slate-400 hover:text-slate-200 mb-1 inline-flex items-center gap-1"
+          @click="goBack">
           <span>←</span>
           <span>Voltar para casos</span>
         </button>
@@ -53,11 +50,7 @@
     <div v-else class="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
       <!-- Coluna esquerda: situação atual + ações -->
       <div class="space-y-4">
-        <InfoSectionCard
-          title="Situação atual"
-          :subtitle="currentStepSubtitle"
-          :badge="stepBadge"
-        >
+        <InfoSectionCard title="Situação atual" :subtitle="currentStepSubtitle" :badge="stepBadge">
           <div v-if="currentStep" class="space-y-3 text-sm">
             <p class="text-slate-200">
               <span class="text-slate-400">Local:</span>
@@ -68,7 +61,7 @@
             <p class="text-slate-300 whitespace-pre-line">
               {{
                 currentStep.description ||
-                  "Nenhuma descrição detalhada disponível para esta etapa."
+                "Nenhuma descrição detalhada disponível para esta etapa."
               }}
             </p>
           </div>
@@ -79,30 +72,21 @@
           </p>
 
           <div class="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
+            <button type="button"
               class="inline-flex items-center justify-center rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
-              :disabled="actionLoading || reachedEnd"
-              @click="onNextStep"
-            >
+              :disabled="actionLoading || reachedEnd" @click="onNextStep">
               <span v-if="!reachedEnd">Avançar investigação</span>
               <span v-else>Você já chegou ao final deste caso</span>
             </button>
 
             <div class="flex flex-col gap-1">
-              <button
-                type="button"
+              <button type="button"
                 class="inline-flex items-center justify-center rounded-lg border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-100 transition disabled:opacity-60 disabled:cursor-not-allowed"
-                :disabled="!canIssueWarrant || actionLoading"
-                @click="openWarrantModal"
-              >
+                :disabled="!canIssueWarrant || actionLoading" @click="openWarrantModal">
                 Emitir mandado de prisão
               </button>
 
-              <p
-                class="text-xs text-slate-500 max-w-xs"
-                v-if="!canIssueWarrant"
-              >
+              <p class="text-xs text-slate-500 max-w-xs" v-if="!canIssueWarrant">
                 Ainda não há pistas suficientes para emitir um mandado com
                 segurança. Continue investigando até consolidar suspeitos e
                 características compatíveis.
@@ -114,22 +98,14 @@
 
       <!-- Coluna direita: pistas + suspeitos -->
       <div class="space-y-4">
-        <InfoSectionCard
-          title="Pistas reunidas"
-          :subtitle="cluesSubtitle"
-          :badge="cluesBadge"
-        >
+        <InfoSectionCard title="Pistas reunidas" :subtitle="cluesSubtitle" :badge="cluesBadge">
           <div v-if="!clues.length" class="text-sm text-slate-400">
             Nenhuma pista foi registrada ainda. Avance na investigação para
             descobrir mais informações sobre o caso.
           </div>
 
           <ul v-else class="space-y-2 text-sm text-slate-200">
-            <li
-              v-for="clue in clues"
-              :key="clue.id"
-              class="border border-slate-700/80 bg-slate-900/70 rounded p-2"
-            >
+            <li v-for="clue in clues" :key="clue.id" class="border border-slate-700/80 bg-slate-900/70 rounded p-2">
               <p class="font-semibold">
                 {{ formatClueAttribute(clue.attribute_name) }}
               </p>
@@ -143,24 +119,14 @@
           </ul>
         </InfoSectionCard>
 
-        <InfoSectionCard
-          title="Suspeitos"
-          :subtitle="suspectsSubtitle"
-          :badge="suspectsBadge"
-        >
+        <InfoSectionCard title="Suspeitos" :subtitle="suspectsSubtitle" :badge="suspectsBadge">
           <div v-if="!suspects.length" class="text-sm text-slate-400">
             Nenhum suspeito foi identificado para este caso até o momento.
           </div>
 
-          <ul
-            v-else
-            class="grid gap-2 text-sm text-slate-200 sm:grid-cols-2"
-          >
-            <li
-              v-for="sus in suspects"
-              :key="sus.id"
-              class="border border-slate-700/80 bg-slate-900/70 rounded p-2 space-y-1"
-            >
+          <ul v-else class="grid gap-2 text-sm text-slate-200 sm:grid-cols-2">
+            <li v-for="sus in suspects" :key="sus.id"
+              class="border border-slate-700/80 bg-slate-900/70 rounded p-2 space-y-1">
               <p class="text-slate-200 font-semibold">
                 {{ sus.name || "Suspeito desconhecido" }}
               </p>
@@ -179,20 +145,24 @@
                 <span class="text-slate-400">Característica marcante:</span>
                 <span> {{ sus.feature }} </span>
               </p>
+
+              <p v-if="sus.matchScore > 0" class="text-xs text-emerald-400 mt-1">
+                Compatível com {{ sus.matchScore }} pista(s)
+                <span v-if="sus.matchedAttributes?.length">
+                  ({{ sus.matchedAttributes.join(", ") }})
+                </span>.
+              </p>
+              <p v-else class="text-xs text-slate-500 mt-1">
+                Nenhuma pista aponta diretamente para este suspeito.
+              </p>
             </li>
           </ul>
         </InfoSectionCard>
       </div>
     </div>
 
-    <WarrantModal
-      v-if="caseData"
-      :show="showWarrant"
-      :case-id="caseId"
-      :suspects="suspects"
-      @close="showWarrant = false"
-      @completed="onWarrantCompleted"
-    />
+    <WarrantModal v-if="caseData" :show="showWarrant" :case-id="caseId" :suspects="suspects"
+      @close="showWarrant = false" @completed="onWarrantCompleted" />
   </div>
 </template>
 
@@ -263,9 +233,8 @@ const currentLocationText = computed(() => {
 
 const cluesBadge = computed(() => {
   if (!clues.value.length) return ""
-  return `${clues.value.length} pista${
-    clues.value.length > 1 ? "s" : ""
-  }`
+  return `${clues.value.length} pista${clues.value.length > 1 ? "s" : ""
+    }`
 })
 
 const cluesSubtitle = computed(() => {
@@ -275,9 +244,8 @@ const cluesSubtitle = computed(() => {
 
 const suspectsBadge = computed(() => {
   if (!suspects.value.length) return ""
-  return `${suspects.value.length} suspeito${
-    suspects.value.length > 1 ? "s" : ""
-  }`
+  return `${suspects.value.length} suspeito${suspects.value.length > 1 ? "s" : ""
+    }`
 })
 
 const suspectsSubtitle = computed(() => {
@@ -305,6 +273,9 @@ function normalizeSuspects(apiSuspects) {
     occupation: s.occupation_snapshot || s.occupation || null,
     vehicle: s.vehicle_snapshot || s.vehicle || null,
     feature: s.feature_snapshot || s.feature || null,
+    // vem direto do backend
+    matchScore: s.matchScore ?? 0,
+    matchedAttributes: s.matchedAttributes || [],
   }))
 }
 

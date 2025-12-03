@@ -506,7 +506,75 @@ export async function getCaseInvestigationStatus(caseId, agentId) {
     [caseId]
   );
 
-  const suspects = suspectsRows || [];
+  // --- cálculo de compatibilidade pistas x suspeitos ---
+  const normalizedClues = (clueRows || []).map((c) => ({
+    name: c.attribute_name,
+    value:
+      typeof c.attribute_value === "string"
+        ? c.attribute_value.toLowerCase().trim()
+        : String(c.attribute_value ?? "")
+            .toLowerCase()
+            .trim(),
+  }));
+
+  function computeMatchesForSuspect(suspect) {
+    let score = 0;
+    const matchedAttributes = [];
+
+    for (const clue of normalizedClues) {
+      let suspectValueRaw = null;
+
+      switch (clue.name) {
+        case "hair_color":
+          suspectValueRaw = suspect.hair_color_snapshot;
+          break;
+        case "occupation":
+          suspectValueRaw = suspect.occupation_snapshot;
+          break;
+        case "hobby":
+          suspectValueRaw = suspect.hobby_snapshot;
+          break;
+        case "vehicle":
+          suspectValueRaw = suspect.vehicle_snapshot;
+          break;
+        case "feature":
+          suspectValueRaw = suspect.feature_snapshot;
+          break;
+        default:
+          break;
+      }
+
+      if (!suspectValueRaw) continue;
+
+      const suspectValue = String(suspectValueRaw).toLowerCase().trim();
+
+      if (!suspectValue) continue;
+
+      // match simples: contém ou é igual
+      if (
+        suspectValue === clue.value ||
+        suspectValue.includes(clue.value) ||
+        clue.value.includes(suspectValue)
+      ) {
+        score += 1;
+        matchedAttributes.push(clue.name);
+      }
+    }
+
+    return {
+      score,
+      matchedAttributes,
+    };
+  }
+
+  const suspects = (suspectsRows || []).map((s) => {
+    const { score, matchedAttributes } = computeMatchesForSuspect(s);
+    return {
+      ...s,
+      matchScore: score,
+      matchedAttributes,
+    };
+  });
 
   // ---- Regra reforçada de emissão de mandado ----
   const completedSteps =
