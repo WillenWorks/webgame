@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { validateBody, validateParams, zId, zNum } from '../middlewares/validate.middleware.js';
 import { Router } from 'express';
 import {
   createCaseController,
@@ -10,17 +12,32 @@ import { travelController } from '../controllers/travel.controller.js';
 import { listSuspectsController } from '../controllers/suspect.controller.js';
 import { listTravelLogController } from '../controllers/travel_log.controller.js';
 
-
 const router = Router();
-
 router.use(authMiddleware);
 
-router.post('/', createCaseController);
+// POST /cases (body: profileId)
+const createCaseSchema = z.object({ profileId: zId });
+router.post('/', validateBody(createCaseSchema), createCaseController);
+
+// GET /cases/active (sem body)
 router.get('/active', getActiveCaseController);
-router.get('/:caseId/suspects', listSuspectsController);
-router.get('/:caseId/visit-current', visitCurrentCityController);
-router.get('/:caseId/travel-log', listTravelLogController);
-router.post('/:caseId/investigate', investigateController);
-router.post('/:caseId/travel', travelController);
+
+// GET /cases/:caseId/suspects
+const caseIdParams = z.object({ caseId: zId });
+router.get('/:caseId/suspects', validateParams(caseIdParams), listSuspectsController);
+
+// GET /cases/:caseId/visit-current
+router.get('/:caseId/visit-current', validateParams(caseIdParams), visitCurrentCityController);
+
+// GET /cases/:caseId/travel-log
+router.get('/:caseId/travel-log', validateParams(caseIdParams), listTravelLogController);
+
+// POST /cases/:caseId/investigate (body: placeId)
+const investigateBody = z.object({ placeId: zId });
+router.post('/:caseId/investigate', validateParams(caseIdParams), validateBody(investigateBody), investigateController);
+
+// POST /cases/:caseId/travel (body: cityId)
+const travelBody = z.object({ cityId: zNum });
+router.post('/:caseId/travel', validateParams(caseIdParams), validateBody(travelBody), travelController);
 
 export default router;

@@ -1,9 +1,22 @@
+import { z } from 'zod';
+import { validateBody } from '../middlewares/validate.middleware.js';
 import { Router } from 'express';
 import { registerController, loginController } from '../controllers/auth.controller.js';
 
 const router = Router();
 
-router.post('/register', registerController);
-router.post('/login', loginController);
+const registerSchema = z.object({
+  username: z.string().min(3),
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+const loginSchema = z.object({
+  username: z.string().min(3),
+  password: z.string().min(6),
+});
+
+router.post('/register', validateBody(registerSchema), registerController);
+router.post('/login', validateBody(loginSchema), loginController);
 
 export default router;

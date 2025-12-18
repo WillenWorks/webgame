@@ -1,11 +1,11 @@
-import { filterSuspectsService } from '../services/suspect_filter.service.js';
-import { validate } from '../middlewares/validate.middleware.js';
 import { z } from 'zod';
+import { validateBody, validateParams, validateQuery, zId } from '../middlewares/validate.middleware.js';
 import { Router } from 'express';
+import { filterSuspectsService } from '../services/suspect_filter.service.js';
 
 const router = Router();
 
-// Schema para filtros (GET via query OU POST via body)
+const caseIdParams = z.object({ caseId: zId });
 const filterSchema = z.object({
   sex_id: z.string().optional(),
   hair_id: z.string().optional(),
@@ -15,10 +15,10 @@ const filterSchema = z.object({
 });
 
 // GET /cases/:caseId/suspects/filter?hair_id=..&vehicle_id=..
-router.get('/:caseId/suspects/filter', validate(filterSchema), async (req, res, next) => {
+router.get('/:caseId/suspects/filter', validateParams(caseIdParams), validateQuery(filterSchema), async (req, res, next) => {
   try {
-    const caseId = req.params.caseId;
-    const suspects = await filterSuspectsService(caseId, req.validated);
+    const caseId = req.validated.params.caseId;
+    const suspects = await filterSuspectsService(caseId, req.validated.query);
     res.json({ ok: true, count: suspects.length, suspects });
   } catch (err) {
     next(err);
@@ -26,10 +26,10 @@ router.get('/:caseId/suspects/filter', validate(filterSchema), async (req, res, 
 });
 
 // POST /cases/:caseId/suspects/filter (body raw JSON)
-router.post('/:caseId/suspects/filter', validate(filterSchema), async (req, res, next) => {
+router.post('/:caseId/suspects/filter', validateParams(caseIdParams), validateBody(filterSchema), async (req, res, next) => {
   try {
-    const caseId = req.params.caseId;
-    const suspects = await filterSuspectsService(caseId, req.validated);
+    const caseId = req.validated.params.caseId;
+    const suspects = await filterSuspectsService(caseId, req.validated.body);
     res.json({ ok: true, count: suspects.length, suspects });
   } catch (err) {
     next(err);
