@@ -1,0 +1,145 @@
+{
+  "info": {
+    "name": "Carmen Online – Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "carmen-backend-collection-20251217"
+  },
+  "item": [
+    {
+      "name": "Auth – Register",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "url": {"raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "register"]},
+        "body": {"mode": "raw", "raw": "{\n  \"username\": \"detetive01\",\n  \"email\": \"detetive@email.com\",\n  \"password\": \"Senha@123\"\n}"}
+      },
+      "response": []
+    },
+    {
+      "name": "Auth – Login",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "url": {"raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"]},
+        "body": {"mode": "raw", "raw": "{\n  \"username\": \"detetive01\",\n  \"password\": \"Senha@123\"\n}"}
+      },
+      "response": []
+    },
+    {
+      "name": "Profiles – Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}"}
+        ],
+        "url": {"raw": "{{baseUrl}}/api/v1/profiles", "host": ["{{baseUrl}}"], "path": ["api", "v1", "profiles"]},
+        "body": {"mode": "raw", "raw": "{\n  \"detective_name\": \"Agente Silva\"\n}"}
+      },
+      "response": []
+    },
+    {
+      "name": "Cases – Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}"}
+        ],
+        "url": {"raw": "{{baseUrl}}/api/v1/cases", "host": ["{{baseUrl}}"], "path": ["api", "v1", "cases"]},
+        "body": {"mode": "raw", "raw": "{\n  \"profileId\": \"{{profileId}}\"\n}"}
+      },
+      "response": []
+    },
+    {
+      "name": "Routes – Generate",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}"}
+        ],
+        "url": {"raw": "{{baseUrl}}/api/v1/routes/generate", "host": ["{{baseUrl}}"], "path": ["api", "v1", "routes", "generate"]},
+        "body": {"mode": "raw", "raw": "{\n  \"caseId\": \"{{caseId}}\",\n  \"steps\": 5\n}"}
+      },
+      "response": []
+    },
+    {
+      "name": "Routes – Get by Case",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{token}}"}
+        ],
+        "url": {"raw": "{{baseUrl}}/api/v1/routes/{{caseId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "routes", "{{caseId}}"]}
+      },
+      "response": []
+    },
+    {
+      "name": "City – Visit Current",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+        "url": {"raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/visit-current", "host": ["{{baseUrl}}"], "path": ["api", "v1", "cases", "{{caseId}}", "visit-current"]}
+      },
+      "response": []
+    },
+    {
+      "name": "Investigate – Place",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}"}
+        ],
+        "url": {"raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/investigate", "host": ["{{baseUrl}}"], "path": ["api", "v1", "cases", "{{caseId}}", "investigate"]},
+        "body": {"mode": "raw", "raw": "{\n  \"placeTypeId\": {{placeTypeId}}\n}"}
+      },
+      "response": []
+    },
+    {
+      "name": "Travel – Next City",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}"}
+        ],
+        "url": {"raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/travel", "host": ["{{baseUrl}}"], "path": ["api", "v1", "cases", "{{caseId}}", "travel"]},
+        "body": {"mode": "raw", "raw": "{\n  \"cityId\": {{nextCityId}}\n}"}
+      },
+      "response": []
+    },
+    {
+      "name": "Suspects – List",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+        "url": {"raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/suspects", "host": ["{{baseUrl}}"], "path": ["api", "v1", "cases", "{{caseId}}", "suspects"]}
+      },
+      "response": []
+    },
+    {
+      "name": "Warrant – Issue",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}"}
+        ],
+        "url": {"raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/warrant", "host": ["{{baseUrl}}"], "path": ["api", "v1", "cases", "{{caseId}}", "warrant"]},
+        "body": {"mode": "raw", "raw": "{\n  \"suspectId\": \"{{suspectId}}\"\n}"}
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:3333"},
+    {"key": "token", "value": ""},
+    {"key": "profileId", "value": "719f4402-cd0d-4aae-9d2b-393dd8d477d6"},
+    {"key": "caseId", "value": "ca36f62b-d57e-4f40-a99b-8e7d8a8a6ea8"},
+    {"key": "placeTypeId", "value": "1"},
+    {"key": "nextCityId", "value": "2"},
+    {"key": "suspectId", "value": "b8d1d5d8-ca8f-41e0-aa07-8d207de447c4"}
+  ]
+}

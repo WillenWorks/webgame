@@ -2,6 +2,7 @@
 # IGNORAR NODE_MODULES E BUILD
 # -----------------------------------------
 node_modules/
+backend_backuop/
 **/node_modules/
 npm-debug.log*
 yarn-debug.log*
