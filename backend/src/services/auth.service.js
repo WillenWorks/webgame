@@ -1,47 +1,54 @@
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
-import { v4 as uuid } from "uuid";
-import env from "../config/env.js";
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+import { v4 as uuid } from 'uuid';
+import { storeRefreshToken, getRefreshToken, revokeRefreshToken } from '../repositories/token.repo.js';
+import { getProfileByUserId } from '../repositories/profile.repo.js';
 
-import { createUser, findUserByEmail } from "../repositories/user.repo.js";
+dotenv.config();
 
-const SALT_ROUNDS = 10;
+const ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES || '15m';
+const REFRESH_EXPIRES_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS || 30);
 
-export async function register({ username, email, password }) {
-  const existing = await findUserByEmail(email);
-  if (existing) {
-    throw new Error("Email já registrado");
-  }
-
-  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-  const user = {
-    id: uuid(),
-    username,
-    email,
-    passwordHash,
-  };
-
-  await createUser(user);
-
-  return { id: user.id, email: user.email };
+function signAccessToken(user) {
+  return jwt.sign({ sub: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES_IN });
 }
 
-export async function login({ email, password }) {
-  const user = await findUserByEmail(email);
+function genRefreshToken() {
+  return uuid();
+}
 
-  if (!user) {
-    throw new Error("Credenciais inválidas");
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+export async function issueTokensForUser(user) {
+  const accessToken = signAccessToken(user);
+  const refreshToken = genRefreshToken();
+  const expiresAt = addDays(new Date(), REFRESH_EXPIRES_DAYS);
+  await storeRefreshToken({ id: uuid(), userId: user.id, token: refreshToken, expiresAt });
+
+  // opcional: perfil padrão do usuário (primeiro)
+  const profile = await getProfileByUserId(user.id);
+
+  return { accessToken, refreshToken, profileId: profile?.id || null };
+}
+
+export async function refreshTokenService(refreshToken) {
+  const row = await getRefreshToken(refreshToken);
+  if (!row) throw new Error('Refresh token inválido');
+  if (row.revoked) throw new Error('Refresh token revogado');
+  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+    throw new Error('Refresh token expirado');
   }
 
-  const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) {
-    throw new Error("Credenciais inválidas");
-  }
+  // Emitir novo access token
+  const accessToken = jwt.sign({ sub: row.user_id }, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES_IN });
+  return { accessToken };
+}
 
-  const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN,
-  });
-
-  return { token };
+export async function revokeRefreshTokenService(refreshToken) {
+  await revokeRefreshToken(refreshToken);
+  return { ok: true };
 }
