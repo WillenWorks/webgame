@@ -5,13 +5,14 @@ import helmet from 'helmet';
 import registerRoutes from './routes/index.js';
 import { errorMiddleware } from './middlewares/error.middleware.js';
 import { requestIdMiddleware, rateLimitMiddleware, sanitizeMiddleware } from './middlewares/security.middleware.js';
+import { metricsMiddleware, metricsController } from './middlewares/metrics.middleware.js';
 
 const app = express();
 
 // Request ID antes de tudo
 app.use(requestIdMiddleware);
 
-// Helmet com algumas diretivas seguras (ajuste conforme necessidade da UI)
+// Helmet com diretivas seguras
 app.use(helmet({
   xssFilter: true,
   noSniff: true,
@@ -23,7 +24,7 @@ app.use(helmet({
 const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // permitir ferramentas locais (Postman)
+    if (!origin) return callback(null, true); // Postman/CLI
     if (allowed.length === 0 || allowed.includes(origin)) return callback(null, true);
     return callback(new Error('Not allowed by CORS'));
   },
@@ -32,12 +33,16 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// JSON e saneamento de entrada
+// JSON e saneamento
 app.use(express.json());
 app.use(sanitizeMiddleware);
 
-// Rate limiting por IP+rota
+// Rate limiting e métricas
 app.use(rateLimitMiddleware);
+app.use(metricsMiddleware);
+
+// Endpoint de métricas Prometheus
+app.get('/metrics', metricsController);
 
 // Rotas
 registerRoutes(app);
