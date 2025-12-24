@@ -8,7 +8,7 @@ export async function createProfileController(req, res, next) {
   try {
     const result = await createProfileService({
       userId: req.userId,
-      detectiveName: req.body.detectiveName
+      detectiveName: req.body.detective_name
     });
 
     res.status(201).json({ ok: true, profile: result });

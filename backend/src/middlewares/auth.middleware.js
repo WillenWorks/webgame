@@ -15,9 +15,10 @@ export async function authMiddleware(req, res, next) {
     }
 
     const token = authHeader.split(" ")[1];
+    console.log("Token recebido:", token);
 
     const decoded = jwt.verify(token, env.JWT_SECRET);
-
+    console.log("Token decodificado:", decoded);
 
 
     // decoded.userId deve existir
