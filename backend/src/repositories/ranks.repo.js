@@ -21,3 +21,31 @@ export async function getRankByXp(xp) {
   }
   return chosen;
 }
+
+export async function ensureDefaultRanks() {
+  try {
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS ranks (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        title VARCHAR(64) NOT NULL,
+        min_xp INT NOT NULL DEFAULT 0,
+        mission_select_unlocked TINYINT(1) NOT NULL DEFAULT 0,
+        difficulty_modifier DECIMAL(4,2) NOT NULL DEFAULT 1.00
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    const [rows] = await pool.execute('SELECT COUNT(*) AS cnt FROM ranks');
+    const cnt = rows[0]?.cnt || 0;
+    if (cnt === 0) {
+      await pool.execute(
+        `INSERT INTO ranks (title, min_xp, mission_select_unlocked, difficulty_modifier) VALUES
+         ('Detetive Júnior', 0, 0, 1.00),
+         ('Detetive Pleno', 1000, 0, 1.10),
+         ('Detetive Sênior', 5000, 1, 1.20),
+         ('Investigador Mestre', 15000, 1, 1.35),
+         ('Grão-Detetive', 40000, 1, 1.50)`
+      );
+    }
+  } catch (e) {
+    console.warn('ensureDefaultRanks falhou:', String(e));
+  }
+}

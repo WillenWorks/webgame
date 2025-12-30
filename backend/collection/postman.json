@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Operação Mônaco - Backend (MVP)",
-    "_postman_id": "d5e3b8f2-ops-monaco-mvp-collection",
-    "description": "Coleção Postman com rotas do backend do jogo de detetive (MVP). Inclui scripts de login/registro que salvam automaticamente os tokens em variáveis da coleção.",
+    "name": "Operação Mônaco - Backend (MVP) v2",
+    "_postman_id": "ops-monaco-mvp-v2",
+    "description": "Coleção Postman com rotas atualizadas: perfis separados (criar/editar/listar/buscar por id e por nome), Auth com scripts que salvam tokens automaticamente.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -13,93 +13,86 @@
           "name": "Registrar usuário",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","register"] },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"agente.silva\",\n  \"password\": \"secret123\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"agente.silva\",\n  \"password\": \"secret123\"\n}" }
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let json = {};\n",
-                  "try { json = pm.response.json(); } catch(e) { }\n",
-                  "if (json && json.accessToken) {\n  pm.collectionVariables.set('accessToken', json.accessToken);\n}\n",
-                  "if (json && json.refreshToken) {\n  pm.collectionVariables.set('refreshToken', json.refreshToken);\n}\n",
-                  "// também atualiza variável transient para Authorization\n",
-                  "pm.collectionVariables.set('authHeader', 'Bearer ' + (json.accessToken || ''));\n"
-                ]
-              }
-            }
-          ]
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "let json = {};\n",
+              "try { json = pm.response.json(); } catch(e) { }\n",
+              "if (json && json.accessToken) { pm.collectionVariables.set('accessToken', json.accessToken); }\n",
+              "if (json && json.refreshToken) { pm.collectionVariables.set('refreshToken', json.refreshToken); }\n",
+              "pm.collectionVariables.set('authHeader', 'Bearer ' + (json.accessToken || ''));\n"
+            ] }
+          }]
         },
         {
           "name": "Login",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","login"] },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"agente.silva\",\n  \"password\": \"secret123\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"agente.silva\",\n  \"password\": \"secret123\"\n}" }
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let json = {};\n",
-                  "try { json = pm.response.json(); } catch(e) { }\n",
-                  "if (json && json.accessToken) {\n  pm.collectionVariables.set('accessToken', json.accessToken);\n}\n",
-                  "if (json && json.refreshToken) {\n  pm.collectionVariables.set('refreshToken', json.refreshToken);\n}\n",
-                  "pm.collectionVariables.set('authHeader', 'Bearer ' + (json.accessToken || ''));\n"
-                ]
-              }
-            }
-          ]
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "let json = {};\n",
+              "try { json = pm.response.json(); } catch(e) { }\n",
+              "if (json && json.accessToken) { pm.collectionVariables.set('accessToken', json.accessToken); }\n",
+              "if (json && json.refreshToken) { pm.collectionVariables.set('refreshToken', json.refreshToken); }\n",
+              "pm.collectionVariables.set('authHeader', 'Bearer ' + (json.accessToken || ''));\n"
+            ] }
+          }]
         },
         {
           "name": "Refresh Token",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": { "raw": "{{baseUrl}}/api/v1/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","refresh"] },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "let json = {};\n",
-                  "try { json = pm.response.json(); } catch(e) { }\n",
-                  "if (json && json.accessToken) {\n  pm.collectionVariables.set('accessToken', json.accessToken);\n  pm.collectionVariables.set('authHeader', 'Bearer ' + json.accessToken);\n}\n"
-                ]
-              }
-            }
-          ]
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "let json = {};\n",
+              "try { json = pm.response.json(); } catch(e) { }\n",
+              "if (json && json.accessToken) { pm.collectionVariables.set('accessToken', json.accessToken); pm.collectionVariables.set('authHeader', 'Bearer ' + json.accessToken); }\n"
+            ] }
+          }]
         }
       ]
     },
     {
       "name": "Perfis",
       "item": [
+        {
+          "name": "Listar perfis do usuário",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "{{authHeader}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/profiles", "host": ["{{baseUrl}}"], "path": ["api","v1","profiles"] }
+          }
+        },
+        {
+          "name": "Obter perfil por ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "{{authHeader}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/profiles/{{profileId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","profiles","{{profileId}}"] }
+          }
+        },
+        {
+          "name": "Obter perfil por nome",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "{{authHeader}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/profiles/by-name/{{profileName}}", "host": ["{{baseUrl}}"], "path": ["api","v1","profiles","by-name","{{profileName}}"] }
+          }
+        },
         {
           "name": "Criar perfil",
           "request": {
@@ -113,19 +106,15 @@
           }
         },
         {
-          "name": "Listar perfis do usuário",
+          "name": "Editar perfil (nome)",
           "request": {
-            "method": "GET",
-            "header": [ { "key": "Authorization", "value": "{{authHeader}}" } ],
-            "url": { "raw": "{{baseUrl}}/api/v1/profiles", "host": ["{{baseUrl}}"], "path": ["api","v1","profiles"] }
-          }
-        },
-        {
-          "name": "Obter perfil por ID",
-          "request": {
-            "method": "GET",
-            "header": [ { "key": "Authorization", "value": "{{authHeader}}" } ],
-            "url": { "raw": "{{baseUrl}}/api/v1/profiles/{{profileId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","profiles","{{profileId}}"] }
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "{{authHeader}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/profiles/{{profileId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","profiles","{{profileId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"detective_name\": \"Novo Nome\"\n}" }
           }
         }
       ]
@@ -149,7 +138,7 @@
           "name": "Visitar cidade atual",
           "request": {
             "method": "GET",
-            "header": [ { "key": "Authorization", "value": "{{authHeader}}" } ],
+            "header": [{ "key": "Authorization", "value": "{{authHeader}}" }],
             "url": { "raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/visit-current", "host": ["{{baseUrl}}"], "path": ["api","v1","cases","{{caseId}}","visit-current"] }
           }
         },
@@ -193,7 +182,7 @@
           "name": "Log de viagens",
           "request": {
             "method": "GET",
-            "header": [ { "key": "Authorization", "value": "{{authHeader}}" } ],
+            "header": [{ "key": "Authorization", "value": "{{authHeader}}" }],
             "url": { "raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/travel-log", "host": ["{{baseUrl}}"], "path": ["api","v1","cases","{{caseId}}","travel-log"] }
           }
         }
@@ -221,33 +210,25 @@
       "item": [
         {
           "name": "Métricas Prometheus",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"] }
-          }
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"] } }
         }
       ]
     }
   ],
-  "event": [
-    {
-      "listen": "prerequest",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "// Garante que Authorization sempre use o accessToken salvo\n",
-          "const token = pm.collectionVariables.get('accessToken');\n",
-          "pm.collectionVariables.set('authHeader', token ? ('Bearer ' + token) : '');\n"
-        ]
-      }
-    }
-  ],
+  "event": [{
+    "listen": "prerequest",
+    "script": { "type": "text/javascript", "exec": [
+      "const token = pm.collectionVariables.get('accessToken');\n",
+      "pm.collectionVariables.set('authHeader', token ? ('Bearer ' + token) : '');\n"
+    ] }
+  }],
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3000" },
     { "key": "accessToken", "value": "" },
     { "key": "refreshToken", "value": "" },
     { "key": "authHeader", "value": "" },
     { "key": "caseId", "value": "" },
-    { "key": "profileId", "value": "" }
+    { "key": "profileId", "value": "" },
+    { "key": "profileName", "value": "" }
   ]
 }

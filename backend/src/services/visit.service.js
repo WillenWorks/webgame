@@ -8,6 +8,9 @@ import {
 import { getStepOptions } from "../repositories/route.repo.js";
 import { getLastTravelLogForStep } from "../repositories/travel_log.repo.js";
 import pool from "../config/database.js";
+import { consumeActionTime } from "./time.service.js";
+
+const VISIT_MINUTES = 30;
 
 export async function visitCurrentCityService(caseId) {
   if (!caseId) {
@@ -23,6 +26,8 @@ export async function visitCurrentCityService(caseId) {
   // 2️⃣ Verificar se já existem locais definidos
   const existingPlaces = await getCityPlaces(caseId, city.city_id);
   if (existingPlaces.length === 3) {
+    // Consome tempo da visita
+    await consumeActionTime({ caseId, minutes: VISIT_MINUTES, timezone: 'America/Sao_Paulo' });
     return {
       city,
       places: existingPlaces,
@@ -59,6 +64,9 @@ export async function visitCurrentCityService(caseId) {
       clue_type: clueMap[i],
     });
   }
+
+  // Consome tempo da visita
+  await consumeActionTime({ caseId, minutes: VISIT_MINUTES, timezone: 'America/Sao_Paulo' });
 
   return {
     city,
@@ -120,7 +128,10 @@ export async function visitCityService(caseId, requestedCityId = null) {
 
   const places = await getCityPlaces(caseId, targetCityId);
 
-  // Montar retorno (inclui city_name/country_name se for a cidade atual; para decoy, retornamos id/step)
+  // Consome tempo da visita
+  await consumeActionTime({ caseId, minutes: VISIT_MINUTES, timezone: 'America/Sao_Paulo' });
+
+  // Montar retorno
   return {
     city: {
       step_order: current.step_order,

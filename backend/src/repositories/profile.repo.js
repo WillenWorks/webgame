@@ -1,10 +1,6 @@
 import pool from '../config/database.js';
 
-export async function createProfile({
-  id,
-  userId,
-  detectiveName
-}) {
+export async function createProfile({ id, userId, detectiveName }) {
   const sql = `
     INSERT INTO profiles (id, user_id, detective_name)
     VALUES (?, ?, ?)
@@ -40,7 +36,6 @@ export async function findProfileById(profileId) {
   return rows[0];
 }
 
-
 export async function updateProfileStats(profileId, data) {
   const {
     xp,
@@ -64,7 +59,6 @@ export async function updateProfileStats(profileId, data) {
 }
 
 export async function getProfileByUserId(userId) {
-
   const [rows] = await pool.execute(
     `
     SELECT *
@@ -74,6 +68,24 @@ export async function getProfileByUserId(userId) {
     `,
     [userId]
   );
-
   return rows[0];
+}
+
+export async function updateProfileName(profileId, detectiveName) {
+  await pool.execute(
+    `
+    UPDATE profiles
+    SET detective_name = ?
+    WHERE id = ?
+    `,
+    [detectiveName, profileId]
+  );
+}
+
+export async function findProfileByName(detectiveName) {
+  const [rows] = await pool.execute(
+    `SELECT * FROM profiles WHERE detective_name = ? LIMIT 1`,
+    [detectiveName]
+  );
+  return rows[0] || null;
 }

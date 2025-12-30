@@ -1,21 +1,30 @@
 import { z } from 'zod';
 import { validateBody, validateParams, zId } from '../middlewares/validate.middleware.js';
+import { requireProfileMiddleware } from '../middlewares/require_profile.middleware.js';
 import { Router } from 'express';
-import { listProfilesController, createProfileController, getProfileController } from '../controllers/profile.controller.js';
+import { listProfilesController, createProfileController, getProfileController, updateProfileController, getProfileByNameController } from '../controllers/profile.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 router.use(authMiddleware);
 
-// GET /profiles
-router.get('/', listProfilesController);
+// GET /profiles → lista todos do usuário logado
+router.get('/', requireProfileMiddleware, listProfilesController);
 
-// POST /profiles (body: detective_name)
+// GET /profiles/:profileId → busca por id
+const paramsSchema = z.object({ profileId: zId });
+router.get('/:profileId', validateParams(paramsSchema), requireProfileMiddleware, getProfileController);
+
+// GET /profiles/by-name/:name → busca por nome (do usuário logado)
+const nameParamsSchema = z.object({ name: z.string().min(3) });
+router.get('/by-name/:name', validateParams(nameParamsSchema), requireProfileMiddleware, getProfileByNameController);
+
+// POST /profiles → criar perfil novo
 const createProfileBody = z.object({ detective_name: z.string().min(3) });
 router.post('/', validateBody(createProfileBody), createProfileController);
 
-// GET /profiles/:profileId
-const paramsSchema = z.object({ profileId: zId });
-router.get('/:profileId', validateParams(paramsSchema), getProfileController);
+// PUT /profiles/:profileId → editar perfil (nome)
+const updateProfileBody = z.object({ detective_name: z.string().min(3) });
+router.put('/:profileId', validateParams(paramsSchema), validateBody(updateProfileBody), requireProfileMiddleware, updateProfileController);
 
 export default router;

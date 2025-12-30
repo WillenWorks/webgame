@@ -2,6 +2,7 @@ import { getCurrentRouteStep, getNextRouteCity, markRouteStepVisited, getStepOpt
 import { countLocationClues } from '../repositories/travel.repo.js';
 import { initTravelLogTable, insertTravelLog } from '../repositories/travel_log.repo.js';
 import { initCurrentViewTable, setCurrentView, getCurrentView } from '../repositories/current_view.repo.js';
+import { estimateTravelMinutes, consumeActionTime } from './time.service.js';
 import { v4 as uuid } from 'uuid';
 
 /**
@@ -10,6 +11,7 @@ import { v4 as uuid } from 'uuid';
  * - Na fase final (último step), viagem fica indisponível.
  * - Ao viajar para uma cidade decoy válida (em options), atualiza a visão atual para essa cidade (sem marcar visited).
  * - Ao viajar para a cidade correta (primary), marca visited e atualiza a visão atual para a cidade da próxima fase.
+ * - Toda viagem consome tempo (inclui decoy), aplicando janela de sono automaticamente.
  */
 export async function travelService(caseId, destinationCityId) {
   await initTravelLogTable();
@@ -102,6 +104,14 @@ export async function travelService(caseId, destinationCityId) {
     success: isCorrect,
     reason: isCorrect ? 'Avanço de fase' : 'Rota incorreta',
   });
+
+  // Consome tempo da viagem (inclui decoy)
+  try {
+    const minutes = await estimateTravelMinutes({ fromCityId: currentStep.city_id, toCityId: destinationCityId });
+    await consumeActionTime({ caseId, minutes, timezone: 'America/Sao_Paulo' });
+  } catch (e) {
+    console.warn('Falha ao consumir tempo de viagem:', e?.message || e);
+  }
 
   return {
     success: isCorrect,

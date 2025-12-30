@@ -55,6 +55,53 @@ export async function investigateService(caseId, cityPlaceId) {
 
     await solveCase(caseId, isCorrectWarrant ? "SOLVED" : "FAILED");
 
+    // Registrar XP e atualizar reputação/perfil com bônus por rota perfeita e término antecipado
+    try {
+      const { default: db } = await import('../config/database.js');
+      const [[ac]] = await db.execute('SELECT profile_id FROM active_cases WHERE id = ?', [caseId]);
+      const playerId = ac?.profile_id;
+      const [[profRow]] = await db.execute('SELECT reputation_score, rank_id FROM profiles WHERE id = ?', [playerId]);
+      const reputationScore = profRow?.reputation_score || 0;
+
+      // Dificuldade: usar modifier do rank
+      const [[rankRow]] = await db.execute('SELECT r.difficulty_modifier FROM ranks r WHERE r.id = ?', [profRow?.rank_id || 1]);
+      const difficulty = rankRow?.difficulty_modifier ? Number(rankRow.difficulty_modifier) || 1.0 : 1.0;
+
+      // Minutos de antecedência: deadline_time - NOW()
+      const [[ts]] = await db.execute('SELECT TIMESTAMPDIFF(MINUTE, NOW(), deadline_time) AS remaining FROM case_time_state WHERE case_id = ? LIMIT 1', [caseId]);
+      const finishedEarlierMinutes = ts?.remaining && ts.remaining > 0 ? ts.remaining : 0;
+
+      const performance = {
+        finished: true,
+        routeErrors: 0,
+        finishedEarlierMinutes,
+        perfectPrecision: isCorrectWarrant,
+      };
+
+      const { computeXP } = await import('./xp.service.js');
+      await computeXP({ playerId, caseId, difficulty, reputationScore, performance });
+
+      const { applyCaseResultToProfile } = await import('./profile.service.js');
+      const stats = await applyCaseResultToProfile(playerId, {
+        solved: isCorrectWarrant,
+        perfect: isCorrectWarrant,
+        wrongWarrant: !isCorrectWarrant,
+      });
+
+      // Redundância: garantir persistência direta no perfil (xp/rep/solved/failed)
+      await db.execute(
+        'UPDATE profiles SET xp = ?, reputation_score = ?, cases_solved = ?, cases_failed = ? WHERE id = ?',
+        [stats.xp, stats.reputation_score, stats.cases_solved, stats.cases_failed, playerId]
+      );
+
+      // Persistir também em player_reputation
+      const { upsertPlayerReputation } = await import('../repositories/player_reputation.repo.js');
+      await upsertPlayerReputation({ playerId, reputationScore: stats.reputation_score });
+    } catch (e) {
+      // Não bloquear captura por falha de XP/Rep
+      console.warn('XP/Rep pós-captura falhou:', String(e));
+    }
+
     await insertClue({
       id: uuid(),
       caseId,
@@ -93,10 +140,17 @@ export async function investigateService(caseId, cityPlaceId) {
   } else {
     if (clueType === "NEXT_LOCATION") {
       const nextCity = await getNextCityByCase(caseId, city.step_order);
-      if (!nextCity) throw new Error("Não existe próxima cidade para este caso");
-      targetType = "CITY";
-      targetValue = nextCity.city_name;
-      targetRefId = nextCity.city_id;
+      if (!nextCity) {
+        // Fase final: não há próxima cidade – não lançar erro; gerar aviso narrativo.
+        clueType = "WARNING";
+        targetType = "NONE";
+        targetValue = null;
+        targetRefId = null;
+      } else {
+        targetType = "CITY";
+        targetValue = nextCity.city_name;
+        targetRefId = nextCity.city_id;
+      }
     } else if (clueType === "VILLAIN") {
       const culprit = await getCulpritByCase(caseId);
       const attrs = [

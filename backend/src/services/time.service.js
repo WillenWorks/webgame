@@ -25,14 +25,16 @@ const VISIT_MINUTES = 30;       // tempo base por visita a um place
 const INVESTIGATE_EXTRA_MIN = 15; // opcional, pode ser 0
 
 // Buffers por dificuldade (exemplos; ideal ler de game_difficulty/xp_rules)
-const DIFFICULTY_PARAMS = {
+const DEFAULT_DIFFICULTY_PARAMS = {
   EASY: { maxFailsAllowed: 3, visitsBuffer: 5, shortcutSkips: 0 },
   HARD: { maxFailsAllowed: 0, visitsBuffer: 1, shortcutSkips: 0 },
   EXTREME: { maxFailsAllowed: 0, visitsBuffer: 0, shortcutSkips: 2 }, // permite pular até 2 visitas/pistas
 };
 
-// Repositórios (placeholders - ajuste caminhos reais)
+// Repositórios
 import { getCityById } from '../repositories/city.repo.js';
+import { getGameDifficultyByCode } from '../repositories/game_difficulty.repo.js';
+import { getXpRuleByDifficulty } from '../repositories/xp_rules.repo.js';
 import { getTravelOverrideMinutes } from '../repositories/travel_overrides.repo.js';
 import { upsertCaseTimeState, getCaseTimeState } from '../repositories/case_time_state.repo.js';
 
@@ -117,7 +119,16 @@ export async function consumeActionTime({ caseId, minutes, timezone = DEFAULT_TZ
 // expectedRoute: array de passos esperados, incluindo decoys quando aplicável
 // cada passo: { from: cityId, to: cityId, visits: count, investigateExtra: boolean }
 export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = DEFAULT_TZ, expectedRoute = [] }) {
-  const params = DIFFICULTY_PARAMS[difficulty] || DIFFICULTY_PARAMS.EASY;
+  let params = DEFAULT_DIFFICULTY_PARAMS[difficulty] || DEFAULT_DIFFICULTY_PARAMS.EASY;
+  const dbParams = await getGameDifficultyByCode(difficulty);
+  if (dbParams) {
+    params = {
+      maxFailsAllowed: Number(dbParams.max_fails_allowed ?? params.maxFailsAllowed),
+      visitsBuffer: Number(dbParams.visits_buffer ?? params.visitsBuffer),
+      shortcutSkips: difficulty === 'EXTREME' ? params.shortcutSkips : params.shortcutSkips,
+    };
+  }
+  await getXpRuleByDifficulty(difficulty);
 
   // segunda 08:00 da semana corrente (TZ)
   const now = dayjs.tz(new Date(), timezone);
@@ -151,7 +162,28 @@ export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = D
   }
 
   // deadline = start + simulatedMinutes (aplicando sono implicitamente no consumo durante o jogo)
-  const deadline = start.add(simulatedMinutes, 'minute');
+  let currentDeadline = start;
+let remaining = simulatedMinutes;
+while (remaining > 0) {
+  const hour = currentDeadline.hour();
+  if (hour >= SLEEP_START || hour < SLEEP_END) {
+    if (hour >= SLEEP_START) {
+      currentDeadline = currentDeadline.add(1, 'day').hour(SLEEP_END).minute(0).second(0);
+    } else {
+      currentDeadline = currentDeadline.hour(SLEEP_END).minute(0).second(0);
+    }
+    continue;
+  }
+  const untilSleep = dayjs(currentDeadline).hour(SLEEP_START).minute(0).second(0);
+  let chunk = Math.min(remaining, untilSleep.diff(currentDeadline, 'minute'));
+  if (chunk <= 0) {
+    currentDeadline = dayjs(currentDeadline).hour(SLEEP_START).minute(0).second(0);
+    continue;
+  }
+  currentDeadline = currentDeadline.add(chunk, 'minute');
+  remaining -= chunk;
+}
+const deadline = currentDeadline;
 
   await upsertCaseTimeState({
     caseId,

@@ -7,13 +7,16 @@ import { generateSuspectsForCase } from './suspect.generator.service.js';
 import { generateRouteService } from './route.generator.service.js';
 import { seedCasePhases } from './phase.seed.service.js';
 import { visitCurrentCityService } from './visit.service.js';
+import { startCaseClock } from './time.service.js';
+import { getRouteSteps } from '../repositories/route.repo.js';
+import { getCaseTimeState } from '../repositories/case_time_state.repo.js';
 
 /**
  * Cria um novo caso para um perfil.
  * Regra:
  * - Só pode existir 1 caso ativo por perfil
  */
-export async function createCaseService({ profileId }) {
+export async function createCaseService({ profileId, difficulty = 'EASY' }) {
   if (!profileId) {
     throw new Error('Perfil não informado');
   }
@@ -27,8 +30,8 @@ export async function createCaseService({ profileId }) {
     id: uuid(),
     profileId,
     stolenObject: 'Artefato histórico valioso',
-    startTime: Date.now(),
-    timeLimitHours: 48
+    startTime: new Date(),
+    timeLimitHours: null,
   };
 
   // 1) Cria o caso
@@ -40,13 +43,29 @@ export async function createCaseService({ profileId }) {
   // 3) Gera rota com opções por fase
   await generateRouteService({ activeCaseId: caseData.id, steps: 5, optionsPerStep: 4 });
 
-  // 4) Semear locais por fase (cidade inicial + opções de cada fase)
+  // 4) Construir rota esperada e iniciar relógio ANTES de qualquer visita (evita erro de estado temporal)
+  const steps = await getRouteSteps(caseData.id);
+  const expectedRoute = [];
+  for (let i = 0; i < steps.length - 1; i++) {
+    expectedRoute.push({ from: steps[i].city_id, to: steps[i + 1].city_id, visits: 3, investigateExtra: false });
+  }
+  await startCaseClock({ caseId: caseData.id, difficulty, timezone: 'America/Sao_Paulo', expectedRoute });
+
+  // 5) Semear locais por fase
   await seedCasePhases(caseData.id);
 
-  // 5) Garantir que a cidade inicial tenha 3 locais disponíveis imediatamente
+  // 6) Visitar cidade inicial (consome tempo de visita)
   await visitCurrentCityService(caseData.id);
 
-  return caseData;
+  // 7) Ler tempos reais do estado
+  const timeState = await getCaseTimeState(caseData.id);
+
+  return {
+    ...caseData,
+    startTime: timeState?.start_time ?? null,
+    deadlineTime: timeState?.deadline_time ?? null,
+    currentTime: timeState?.current_time ?? null,
+  };
 }
 
 export async function getActiveCaseService(profileId) {

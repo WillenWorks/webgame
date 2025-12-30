@@ -9,6 +9,16 @@ export async function getPlayerReputation(playerId) {
 }
 
 export async function upsertPlayerReputation({ playerId, reputationScore }) {
+  // Garantir que a tabela exista e tenha chave primária em player_id
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS player_reputation (
+       player_id CHAR(36) NOT NULL,
+       reputation_score INT NOT NULL DEFAULT 0,
+       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+       PRIMARY KEY (player_id)
+     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
+  );
+
   const [result] = await pool.query(
     `INSERT INTO player_reputation (player_id, reputation_score)
      VALUES (?, ?)

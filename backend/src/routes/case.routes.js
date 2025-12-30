@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { validateBody, validateParams, zId, zNum } from '../middlewares/validate.middleware.js';
 import { Router } from 'express';
+import { requireProfileMiddleware } from '../middlewares/require_profile.middleware.js';
 import {
   createCaseController,
-  getActiveCaseController
+  getActiveCaseController,
+  getCaseByIdController
 } from '../controllers/case.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 import { visitCurrentCityController } from '../controllers/visit.controller.js';
@@ -16,14 +18,17 @@ const router = Router();
 router.use(authMiddleware);
 
 // POST /cases (body: profileId)
-const createCaseSchema = z.object({ profileId: zId });
-router.post('/', validateBody(createCaseSchema), createCaseController);
+const createCaseSchema = z.object({ difficulty: z.enum(['EASY','HARD','EXTREME']).optional() });
+router.post('/', requireProfileMiddleware, validateBody(createCaseSchema), createCaseController);
 
 // GET /cases/active (sem body)
-router.get('/active', getActiveCaseController);
+router.get('/active', requireProfileMiddleware, getActiveCaseController);
+
+// GET /cases/:caseId
+const caseIdParams = z.object({ caseId: zId });
+router.get('/:caseId', validateParams(caseIdParams), getCaseByIdController);
 
 // GET /cases/:caseId/suspects
-const caseIdParams = z.object({ caseId: zId });
 router.get('/:caseId/suspects', validateParams(caseIdParams), listSuspectsController);
 
 // GET /cases/:caseId/visit-current
