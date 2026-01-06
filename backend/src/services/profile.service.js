@@ -72,7 +72,7 @@ export async function applyCaseResultToProfile(profileId, result) {
     casesFailedInc = 1;
   }
 
-  const { getPlayerReputation, upsertPlayerReputation } = await import('../repositories/player_reputation.repo.js');
+  const { getPlayerReputation, insertPlayerReputationEntry } = await import('../repositories/player_reputation.repo.js');
   const currentRepRow = await getPlayerReputation(profileId);
   const currentRepScore = currentRepRow ? currentRepRow.reputation_score : ((profile.reputation_score || 0) || 0);
   const { redemptionDelta } = await import('./reputation.service.js');
@@ -90,8 +90,6 @@ export async function applyCaseResultToProfile(profileId, result) {
     cases_solved: newSolved,
     cases_failed: newFailed,
   });
-  // Espelhar reputação em player_reputation
-  await upsertPlayerReputation({ playerId: profileId, reputationScore: newRep });
 
   // Promove por XP (garantir ranks)
   const { ensureDefaultRanks, getRankByXp } = await import('../repositories/ranks.repo.js');

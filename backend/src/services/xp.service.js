@@ -6,8 +6,10 @@ import { getReputationMultipliers } from '../repositories/reputation_rules.repo.
 import { insertXpHistory } from '../repositories/player_xp_history.repo.js';
 
 export async function computeXP({ playerId, caseId, difficulty, reputationScore, performance }) {
+  console.log('[xp] difficulty recebido', difficulty);
   // performance: { finished: boolean, routeErrors: number, finishedEarlierMinutes: number, perfectPrecision: boolean }
   const xpRule = await getXpRuleByDifficulty(difficulty); // { xp_base, bonus_time_factor, bonus_precision, debuff_failure_factor }
+  console.log('[xp] xpRule', xpRule);
   const mult = await getReputationMultipliers(reputationScore); // { debuff_base_factor, bonus_multiplier }
 
   let xpBase = xpRule.xp_base;
@@ -43,5 +45,6 @@ export async function computeXP({ playerId, caseId, difficulty, reputationScore,
     },
   });
 
+  console.log('[xp] breakdown para insert', { xpBase, bonusTime, bonusPrecision, difficulty, reputationScore });
   return { xpFinal, xpBase, bonusTime, bonusPrecision };
 }

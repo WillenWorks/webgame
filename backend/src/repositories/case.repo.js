@@ -5,7 +5,8 @@ export async function createCase({
   profileId,
   stolenObject,
   startTime,
-  timeLimitHours
+  timeLimitHours,
+  difficultyCode
 }) {
   const sql = `
     INSERT INTO active_cases (
@@ -13,9 +14,10 @@ export async function createCase({
       profile_id,
       stolen_object,
       start_time,
-      time_limit_hours
+      time_limit_hours,
+      difficulty_id
     )
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, (SELECT id FROM game_difficulty WHERE code = ?))
   `;
 
   await pool.execute(sql, [
@@ -23,7 +25,8 @@ export async function createCase({
     profileId,
     stolenObject,
     startTime,
-    timeLimitHours
+    timeLimitHours,
+    difficultyCode
   ]);
 }
 

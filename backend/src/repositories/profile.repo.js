@@ -5,7 +5,18 @@ export async function createProfile({ id, userId, detectiveName }) {
     INSERT INTO profiles (id, user_id, detective_name)
     VALUES (?, ?, ?)
   `;
-  await pool.execute(sql, [id, userId, detectiveName]);
+  try {
+    await pool.execute(sql, [id, userId, detectiveName]);
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      const [rows] = await pool.execute(
+        'SELECT * FROM profiles WHERE user_id = ? AND detective_name = ? LIMIT 1',
+        [userId, detectiveName]
+      );
+      return rows[0] || null;
+    }
+    throw err;
+  }
 }
 
 export async function findProfilesByUser(userId) {

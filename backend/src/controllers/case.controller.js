@@ -7,7 +7,8 @@ import { getCaseById } from '../repositories/warrant.repo.js';
 export async function createCaseController(req, res, next) {
   try {
     const result = await createCaseService({
-      profileId: req.user?.profileId
+      profileId: req.user?.profileId,
+      difficulty: req.body?.difficulty ?? 'EASY'
     });
 
     res.status(201).json({

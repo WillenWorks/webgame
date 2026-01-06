@@ -119,6 +119,20 @@ export async function consumeActionTime({ caseId, minutes, timezone = DEFAULT_TZ
 // expectedRoute: array de passos esperados, incluindo decoys quando aplicável
 // cada passo: { from: cityId, to: cityId, visits: count, investigateExtra: boolean }
 export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = DEFAULT_TZ, expectedRoute = [] }) {
+  // Derivar dificuldade do próprio caso quando possível
+  try {
+    const { default: db } = await import('../config/database.js');
+    const [[row]] = await db.execute(
+      'SELECT gd.code AS difficulty_code FROM active_cases ac JOIN game_difficulty gd ON gd.id = ac.difficulty_id WHERE ac.id = ? LIMIT 1',
+      [caseId]
+    );
+    if (row && row.difficulty_code) {
+      difficulty = row.difficulty_code; // sobrescreve com a fonte da verdade do caso
+      console.log('[time] startCaseClock difficulty from case', { caseId, difficulty });
+    }
+  } catch (err) {
+    console.warn('[time] startCaseClock: falha ao ler dificuldade do caso, usando parâmetro', String(err));
+  }
   let params = DEFAULT_DIFFICULTY_PARAMS[difficulty] || DEFAULT_DIFFICULTY_PARAMS.EASY;
   const dbParams = await getGameDifficultyByCode(difficulty);
   if (dbParams) {
@@ -128,7 +142,14 @@ export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = D
       shortcutSkips: difficulty === 'EXTREME' ? params.shortcutSkips : params.shortcutSkips,
     };
   }
-  await getXpRuleByDifficulty(difficulty);
+  // Opcional: consultar xp_rules para eventual ajuste fino de tempo baseado em fatores
+try {
+  const xpRule = await getXpRuleByDifficulty(difficulty);
+  console.log('[time] xpRule for difficulty', difficulty, xpRule);
+  // Se desejar, poderíamos ajustar algum coeficiente temporal aqui no futuro
+} catch (e) {
+  console.warn('[time] getXpRuleByDifficulty falhou (não crítico para tempo):', String(e));
+}
 
   // segunda 08:00 da semana corrente (TZ)
   const now = dayjs.tz(new Date(), timezone);

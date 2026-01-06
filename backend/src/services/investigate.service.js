@@ -42,6 +42,7 @@ export async function investigateService(caseId, cityPlaceId) {
     await insertCapturedVillainLog({
       id: uuid(),
       profileId: gameCase.profile_id,
+      caseId,
       villainName: culprit?.name || "Desconhecido",
       attributesSnapshot: {
         sex: culprit?.sex,
@@ -64,8 +65,16 @@ export async function investigateService(caseId, cityPlaceId) {
       const reputationScore = profRow?.reputation_score || 0;
 
       // Dificuldade: usar modifier do rank
-      const [[rankRow]] = await db.execute('SELECT r.difficulty_modifier FROM ranks r WHERE r.id = ?', [profRow?.rank_id || 1]);
-      const difficulty = rankRow?.difficulty_modifier ? Number(rankRow.difficulty_modifier) || 1.0 : 1.0;
+      const [[caseRow]] = await db.execute('SELECT gd.code AS difficulty_code FROM active_cases ac JOIN game_difficulty gd ON gd.id = ac.difficulty_id WHERE ac.id = ? LIMIT 1', [caseId]);
+      const difficultyMod = null;
+      const mapModifierToLabel = (m) => {
+        if (m === 1.20 || m === '1.20' || m === 'EASY') return 'EASY';
+        if (m === 1.10 || m === '1.10' || m === 'HARD') return 'HARD';
+        if (m === 1.05 || m === '1.05' || m === 'EXTREME') return 'EXTREME';
+        return 'EASY';
+      };
+      const difficultyLabel = caseRow?.difficulty_code || 'EASY';
+      console.log('[investigate] difficulty from case', { difficultyLabel, caseId });
 
       // Minutos de antecedência: deadline_time - NOW()
       const [[ts]] = await db.execute('SELECT TIMESTAMPDIFF(MINUTE, NOW(), deadline_time) AS remaining FROM case_time_state WHERE case_id = ? LIMIT 1', [caseId]);
@@ -79,13 +88,16 @@ export async function investigateService(caseId, cityPlaceId) {
       };
 
       const { computeXP } = await import('./xp.service.js');
-      await computeXP({ playerId, caseId, difficulty, reputationScore, performance });
+      console.log('[investigate] computeXP payload', { playerId, caseId, difficultyLabel, difficultyMod, reputationScore, performance });
+      await computeXP({ playerId, caseId, difficulty: difficultyLabel, reputationScore, performance });
+      console.log('[investigate] computeXP called successfully');
 
       const { applyCaseResultToProfile } = await import('./profile.service.js');
       const stats = await applyCaseResultToProfile(playerId, {
         solved: isCorrectWarrant,
         perfect: isCorrectWarrant,
         wrongWarrant: !isCorrectWarrant,
+        caseId,
       });
 
       // Redundância: garantir persistência direta no perfil (xp/rep/solved/failed)
@@ -94,9 +106,36 @@ export async function investigateService(caseId, cityPlaceId) {
         [stats.xp, stats.reputation_score, stats.cases_solved, stats.cases_failed, playerId]
       );
 
-      // Persistir também em player_reputation
-      const { upsertPlayerReputation } = await import('../repositories/player_reputation.repo.js');
-      await upsertPlayerReputation({ playerId, reputationScore: stats.reputation_score });
+      // Registrar também no player_reputation (histórico por caso)
+      const { insertPlayerReputationEntry, getPlayerReputationLatestByPlayer } = await import('../repositories/player_reputation.repo.js');
+      const latestRep = await getPlayerReputationLatestByPlayer(playerId);
+      if (!latestRep || latestRep.case_id !== caseId) {
+        await insertPlayerReputationEntry({ id: uuid(), playerId, caseId, reputationScore: stats.reputation_score });
+      }
+
+      // Auditoria com case_id: histórico de stats e reputação (tabelas auxiliares)
+      try {
+        const { insertProfileStatsHistory } = await import('../repositories/profile_stats_history.repo.js');
+        const { insertPlayerReputationHistory } = await import('../repositories/player_reputation_history.repo.js');
+        await insertProfileStatsHistory({
+          id: uuid(),
+          profileId: playerId,
+          caseId,
+          xp: stats.xp,
+          reputationScore: stats.reputation_score,
+          rankId: stats.rank_id || null,
+          casesSolved: stats.cases_solved,
+          casesFailed: stats.cases_failed,
+        });
+        await insertPlayerReputationHistory({
+          id: uuid(),
+          playerId,
+          caseId,
+          reputationScore: stats.reputation_score,
+        });
+      } catch (auditErr) {
+        console.warn('Falha ao gravar histórico de auditoria:', String(auditErr));
+      }
     } catch (e) {
       // Não bloquear captura por falha de XP/Rep
       console.warn('XP/Rep pós-captura falhou:', String(e));
@@ -175,10 +214,10 @@ export async function investigateService(caseId, cityPlaceId) {
 
   // Obter difficulty_modifier do rank
   const [[prof]] = await (await import('../config/database.js')).default.execute(
-    'SELECT p.rank_id, r.difficulty_modifier FROM profiles p JOIN ranks r ON r.id = p.rank_id WHERE p.id = (SELECT profile_id FROM active_cases WHERE id = ?)',
+    'SELECT gd.code AS difficulty_code FROM active_cases ac JOIN game_difficulty gd ON gd.id = ac.difficulty_id WHERE ac.id = ?',
     [caseId]
   );
-  const difficulty = prof?.difficulty_modifier ? Number(prof.difficulty_modifier) || 1.0 : 1.0;
+  const difficulty = prof?.difficulty_code || 'EASY';
 
   const prompt = buildPrompt({
     intent: AI_INTENT.CLUE_TEXT,

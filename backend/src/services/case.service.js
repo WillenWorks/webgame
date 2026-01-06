@@ -32,10 +32,11 @@ export async function createCaseService({ profileId, difficulty = 'EASY' }) {
     stolenObject: 'Artefato histórico valioso',
     startTime: new Date(),
     timeLimitHours: null,
+    difficultyCode: difficulty,
   };
 
   // 1) Cria o caso
-  await createCase(caseData);
+  await createCase(caseData); // caseData inclui difficultyCode para persistir difficulty_id
 
   // 2) Gera suspeitos
   await generateSuspectsForCase(caseData.id);
