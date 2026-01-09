@@ -63,12 +63,35 @@ export async function estimateTravelMinutes({ fromCityId, toCityId }) {
   const km = haversineKm(from.lat, from.lng, to.lat, to.lng);
   const sameCountry = from.country_id && to.country_id && from.country_id === to.country_id;
 
-  if (sameCountry) {
-    const minutes = (km / CAR_SPEED_KMH) * 60 + CAR_OVERHEAD_MIN;
-    return Math.ceil(minutes);
-  } else {
-    const minutes = (km / PLANE_SPEED_KMH) * 60 + PLANE_OVERHEAD_MIN;
-    return Math.ceil(minutes);
+  // Novo: usar regions/countries e country_neighbors para classificar custo fictício
+  try {
+    const { default: db } = await import('../config/database.js');
+    const [[r1]] = await db.execute('SELECT region_id FROM countries WHERE id = ? LIMIT 1', [from.country_id]);
+    const [[r2]] = await db.execute('SELECT region_id FROM countries WHERE id = ? LIMIT 1', [to.country_id]);
+    const [[nei]] = await db.execute('SELECT 1 AS ok FROM country_neighbors WHERE country_id = ? AND neighbor_country_id = ? LIMIT 1', [from.country_id, to.country_id]);
+    const sameRegion = r1?.region_id && r2?.region_id && r1.region_id === r2.region_id;
+    // Regras fictícias:
+    if (sameCountry) {
+      // viagem doméstica curta: tratar como intra-continente leve
+      return 120; // 2h
+    }
+    if (nei?.ok) {
+      return 120; // vizinho: 2h
+    }
+    if (sameRegion) {
+      return 240; // intra-continente: 4h
+    }
+    return 360; // inter-continente: 6h
+  } catch (e) {
+    // Fallback para modelo anterior por km se algo falhar
+    const sameCountryFallback = sameCountry;
+    if (sameCountryFallback) {
+      const minutes = (km / CAR_SPEED_KMH) * 60 + CAR_OVERHEAD_MIN;
+      return Math.ceil(minutes);
+    } else {
+      const minutes = (km / PLANE_SPEED_KMH) * 60 + PLANE_OVERHEAD_MIN;
+      return Math.ceil(minutes);
+    }
   }
 }
 
@@ -143,13 +166,13 @@ export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = D
     };
   }
   // Opcional: consultar xp_rules para eventual ajuste fino de tempo baseado em fatores
-try {
-  const xpRule = await getXpRuleByDifficulty(difficulty);
-  console.log('[time] xpRule for difficulty', difficulty, xpRule);
-  // Se desejar, poderíamos ajustar algum coeficiente temporal aqui no futuro
-} catch (e) {
-  console.warn('[time] getXpRuleByDifficulty falhou (não crítico para tempo):', String(e));
-}
+  try {
+    const xpRule = await getXpRuleByDifficulty(difficulty);
+    console.log('[time] xpRule for difficulty', difficulty, xpRule);
+    // Se desejar, poderíamos ajustar algum coeficiente temporal aqui no futuro
+  } catch (e) {
+    console.warn('[time] getXpRuleByDifficulty falhou (não crítico para tempo):', String(e));
+  }
 
   // segunda 08:00 da semana corrente (TZ)
   const now = dayjs.tz(new Date(), timezone);
@@ -184,27 +207,27 @@ try {
 
   // deadline = start + simulatedMinutes (aplicando sono implicitamente no consumo durante o jogo)
   let currentDeadline = start;
-let remaining = simulatedMinutes;
-while (remaining > 0) {
-  const hour = currentDeadline.hour();
-  if (hour >= SLEEP_START || hour < SLEEP_END) {
-    if (hour >= SLEEP_START) {
-      currentDeadline = currentDeadline.add(1, 'day').hour(SLEEP_END).minute(0).second(0);
-    } else {
-      currentDeadline = currentDeadline.hour(SLEEP_END).minute(0).second(0);
+  let remaining = simulatedMinutes;
+  while (remaining > 0) {
+    const hour = currentDeadline.hour();
+    if (hour >= SLEEP_START || hour < SLEEP_END) {
+      if (hour >= SLEEP_START) {
+        currentDeadline = currentDeadline.add(1, 'day').hour(SLEEP_END).minute(0).second(0);
+      } else {
+        currentDeadline = currentDeadline.hour(SLEEP_END).minute(0).second(0);
+      }
+      continue;
     }
-    continue;
+    const untilSleep = dayjs(currentDeadline).hour(SLEEP_START).minute(0).second(0);
+    let chunk = Math.min(remaining, untilSleep.diff(currentDeadline, 'minute'));
+    if (chunk <= 0) {
+      currentDeadline = dayjs(currentDeadline).hour(SLEEP_START).minute(0).second(0);
+      continue;
+    }
+    currentDeadline = currentDeadline.add(chunk, 'minute');
+    remaining -= chunk;
   }
-  const untilSleep = dayjs(currentDeadline).hour(SLEEP_START).minute(0).second(0);
-  let chunk = Math.min(remaining, untilSleep.diff(currentDeadline, 'minute'));
-  if (chunk <= 0) {
-    currentDeadline = dayjs(currentDeadline).hour(SLEEP_START).minute(0).second(0);
-    continue;
-  }
-  currentDeadline = currentDeadline.add(chunk, 'minute');
-  remaining -= chunk;
-}
-const deadline = currentDeadline;
+  const deadline = currentDeadline;
 
   await upsertCaseTimeState({
     caseId,

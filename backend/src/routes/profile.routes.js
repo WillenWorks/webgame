@@ -15,6 +15,10 @@ router.get('/', requireProfileMiddleware, listProfilesController);
 const paramsSchema = z.object({ profileId: zId });
 router.get('/:profileId', validateParams(paramsSchema), requireProfileMiddleware, getProfileController);
 
+// GET /profiles/:profileId/summary
+import { getProfileSummaryController } from '../controllers/profile_summary.controller.js';
+router.get('/:profileId/summary', validateParams(paramsSchema), requireProfileMiddleware, getProfileSummaryController);
+
 // GET /profiles/by-name/:name → busca por nome (do usuário logado)
 const nameParamsSchema = z.object({ name: z.string().min(3) });
 router.get('/by-name/:name', validateParams(nameParamsSchema), requireProfileMiddleware, getProfileByNameController);

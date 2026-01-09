@@ -33,14 +33,68 @@ const DB_USER = process.env.DB_USER || "root";
 const DB_PASS = process.env.DB_PASSWORD || "BE-MySql666Dr@gon";
 const DB_NAME = process.env.DB_NAME || "project_detective";
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
 async function http(method, pathUrl, body, token) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BASE}${pathUrl}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
-  const txt = await res.text();
-  let json = null; try { json = JSON.parse(txt); } catch {}
-  if (!res.ok) { throw new Error(`HTTP ${res.status} ${res.statusText}: ${txt}`); }
-  return json || { raw: txt };
+  // Optional debug hint header (backend may ignore if not implemented)
+  headers['X-Debug'] = '1';
+
+  const ctrl = new AbortController();
+  const timeoutMs = 30000; // 30s
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  const endpoint = `${method} ${pathUrl}`;
+
+  try {
+    const res = await fetch(`${BASE}${pathUrl}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
+    });
+    const txt = await res.text();
+    let json = null;
+    try { json = JSON.parse(txt); } catch {}
+
+    if (!res.ok) {
+      // Extract backend error shape if present
+      const errObj = json?.error || json || {};
+      const requestId = errObj.requestId || errObj.request_id || null;
+      const code = errObj.code || errObj.sqlState || null;
+      const msg = errObj.message || errObj.sqlMessage || txt;
+
+      const detail = {
+        time: nowIso(),
+        endpoint,
+        status: `${res.status} ${res.statusText}`,
+        requestId,
+        code,
+        message: msg,
+        raw: txt?.slice(0, 1000), // cap long bodies
+      };
+      // Print helpful diagnostics to console
+      console.error('HTTP error diagnostics:', JSON.stringify(detail, null, 2));
+      // Throw enriched error so caller (main) can log/save
+      throw new Error(`HTTP ${res.status} ${res.statusText}: ${msg}`);
+    }
+    return json || { raw: txt };
+  } catch (e) {
+    // Distinguish between timeout and other failures
+    const info = {
+      time: nowIso(),
+      endpoint,
+      timeoutMs,
+      cause: String(e?.cause || ''),
+      error: String(e),
+    };
+    console.error('Fetch failure diagnostics:', JSON.stringify(info, null, 2));
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

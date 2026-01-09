@@ -12,6 +12,7 @@ import { visitCurrentCityController } from '../controllers/visit.controller.js';
 import { investigateController } from '../controllers/investigate.controller.js';
 import { travelController } from '../controllers/travel.controller.js';
 import { listSuspectsController } from '../controllers/suspect.controller.js';
+import { getCasePerformanceController } from '../controllers/case_performance.controller.js';
 import { listTravelLogController } from '../controllers/travel_log.controller.js';
 
 const router = Router();
@@ -27,6 +28,8 @@ router.get('/active', requireProfileMiddleware, getActiveCaseController);
 // GET /cases/:caseId
 const caseIdParams = z.object({ caseId: zId });
 router.get('/:caseId', validateParams(caseIdParams), getCaseByIdController);
+// GET /cases/:caseId/performance
+router.get('/:caseId/performance', validateParams(caseIdParams), getCasePerformanceController);
 
 // GET /cases/:caseId/suspects
 router.get('/:caseId/suspects', validateParams(caseIdParams), listSuspectsController);

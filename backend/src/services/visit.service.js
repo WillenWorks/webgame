@@ -28,6 +28,15 @@ export async function visitCurrentCityService(caseId) {
   if (existingPlaces.length === 3) {
     // Consome tempo da visita
     await consumeActionTime({ caseId, minutes: VISIT_MINUTES, timezone: 'America/Sao_Paulo' });
+  try {
+    const { v4: uuidv4 } = await import('uuid');
+    await pool.execute(
+      'INSERT INTO case_visit_log (id, case_id, city_id, step_order) VALUES (?, ?, ?, ?)',
+      [uuidv4(), caseId, city.city_id ?? targetCityId ?? 0, (city?.step_order ?? current?.step_order ?? 0)]
+    );
+  } catch (e) {
+    console.warn('[visit] falha ao registrar case_visit_log:', String(e));
+  }
     return {
       city,
       places: existingPlaces,

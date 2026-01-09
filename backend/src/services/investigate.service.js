@@ -64,15 +64,8 @@ export async function investigateService(caseId, cityPlaceId) {
       const [[profRow]] = await db.execute('SELECT reputation_score, rank_id FROM profiles WHERE id = ?', [playerId]);
       const reputationScore = profRow?.reputation_score || 0;
 
-      // Dificuldade: usar modifier do rank
+      // Dificuldade: ler do caso (difficulty_id -> game_difficulty.code)
       const [[caseRow]] = await db.execute('SELECT gd.code AS difficulty_code FROM active_cases ac JOIN game_difficulty gd ON gd.id = ac.difficulty_id WHERE ac.id = ? LIMIT 1', [caseId]);
-      const difficultyMod = null;
-      const mapModifierToLabel = (m) => {
-        if (m === 1.20 || m === '1.20' || m === 'EASY') return 'EASY';
-        if (m === 1.10 || m === '1.10' || m === 'HARD') return 'HARD';
-        if (m === 1.05 || m === '1.05' || m === 'EXTREME') return 'EXTREME';
-        return 'EASY';
-      };
       const difficultyLabel = caseRow?.difficulty_code || 'EASY';
       console.log('[investigate] difficulty from case', { difficultyLabel, caseId });
 
@@ -87,10 +80,19 @@ export async function investigateService(caseId, cityPlaceId) {
         perfectPrecision: isCorrectWarrant,
       };
 
+      const { getRouteSteps } = await import('../repositories/route.repo.js');
+      const steps = await getRouteSteps(caseId);
+      const totalPlacesPossible = ((steps?.length ?? 0) * 3);
+      const [[visitsRowAll]] = await db.execute('SELECT COUNT(*) AS visits FROM case_visit_log WHERE case_id = ?', [caseId]);
+      const visitsAll = Number(visitsRowAll?.visits ?? 0);
+      const placesSkipped = Math.max(0, totalPlacesPossible - visitsAll);
+      const placesSkippedPct = isCorrectWarrant ? Math.min(placesSkipped * 0.02, 0.20) : 0;
+      const daysEarly = Math.floor((finishedEarlierMinutes || 0) / 1440);
+
       const { computeXP } = await import('./xp.service.js');
-      console.log('[investigate] computeXP payload', { playerId, caseId, difficultyLabel, difficultyMod, reputationScore, performance });
-      await computeXP({ playerId, caseId, difficulty: difficultyLabel, reputationScore, performance });
-      console.log('[investigate] computeXP called successfully');
+      console.log('[investigate] computeXP payload', { playerId, caseId, difficultyLabel, reputationScore, performance, daysEarly, placesSkippedPct, totalPlacesPossible, visitsAll });
+      const xpRes = await computeXP({ playerId, caseId, difficulty: difficultyLabel, reputationScore, performance, daysEarly, placesSkippedPct });
+      console.log('[investigate] computeXP called successfully', xpRes);
 
       const { applyCaseResultToProfile } = await import('./profile.service.js');
       const stats = await applyCaseResultToProfile(playerId, {
@@ -99,6 +101,31 @@ export async function investigateService(caseId, cityPlaceId) {
         wrongWarrant: !isCorrectWarrant,
         caseId,
       });
+
+      // Registrar Case Performance
+      try {
+        const { insertCasePerformance } = await import('../repositories/case_performance.repo.js');
+        const reputationDelta = (stats?.reputation_score ?? 0) - reputationScore;
+        // Agregar visitas e erros de rota do caso
+        const [[visitsRow]] = await db.execute('SELECT COUNT(*) AS visits FROM case_visit_log WHERE case_id = ?', [caseId]);
+        const [[errorsRow]] = await db.execute('SELECT COUNT(*) AS route_errors FROM case_travel_log WHERE case_id = ? AND success = 0', [caseId]);
+        const visitsCount = Number(visitsRow?.visits ?? 0);
+        const routeErrors = Number(errorsRow?.route_errors ?? 0);
+        await insertCasePerformance({
+          id: uuid(),
+          caseId,
+          playerId,
+          difficultyCode: difficultyLabel,
+          visitsCount,
+          routeErrors,
+          finishedEarlierMinutes: performance.finishedEarlierMinutes || 0,
+          perfectPrecision: performance.perfectPrecision || false,
+          xpAwarded: xpRes?.xpFinal ?? 0,
+          reputationDelta,
+        });
+      } catch (perfErr) {
+        console.warn('[investigate] falha ao registrar case_performance:', String(perfErr));
+      }
 
       // Redundância: garantir persistência direta no perfil (xp/rep/solved/failed)
       await db.execute(
@@ -212,7 +239,7 @@ export async function investigateService(caseId, cityPlaceId) {
   const currentOptions = await getStepOptions(caseId, city.step_order);
   if (!currentOptions) mode = "final";
 
-  // Obter difficulty_modifier do rank
+  // Obter difficulty do caso para prompt
   const [[prof]] = await (await import('../config/database.js')).default.execute(
     'SELECT gd.code AS difficulty_code FROM active_cases ac JOIN game_difficulty gd ON gd.id = ac.difficulty_id WHERE ac.id = ?',
     [caseId]
