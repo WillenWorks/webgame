@@ -12,7 +12,7 @@ export async function getProfileSummary({ profileId }) {
     `SELECT cp.*, gd.code AS difficulty
      FROM case_performance cp
      LEFT JOIN game_difficulty gd ON gd.code = cp.difficulty_code
-     WHERE cp.player_id = ?
+     WHERE cp.profile_id = ?
      ORDER BY cp.created_at DESC
      LIMIT 5`,
     [profileId]
@@ -25,7 +25,7 @@ export async function getProfileSummary({ profileId }) {
             SUM(route_errors) AS total_route_errors,
             SUM(xp_awarded) AS total_xp_awarded
      FROM case_performance
-     WHERE player_id = ?`,
+     WHERE profile_id = ?`,
     [profileId]
   );
 

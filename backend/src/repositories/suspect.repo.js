@@ -35,11 +35,11 @@ export async function getSuspectsByCase(caseId) {
     SELECT
       s.id,
       s.name,
-      sx.label AS sex,
-      h.label AS hair,
-      hb.label AS hobby,
-      v.label AS vehicle,
-      f.label AS feature,
+      sx.name AS sex,
+      h.name AS hair,
+      hb.name AS hobby,
+      v.name AS vehicle,
+      f.name AS feature,
       s.is_culprit
     FROM case_suspect_pool s
     JOIN attr_sex sx ON sx.id = s.sex_id
@@ -59,15 +59,15 @@ export async function getCulpritByCase(caseId) {
       s.id,
       s.name,
       s.sex_id,
-      sx.label AS sex,
+      sx.name AS sex,
       s.hair_id,
-      h.label AS hair,
+      h.name AS hair,
       s.hobby_id,
-      hb.label AS hobby,
+      hb.name AS hobby,
       s.vehicle_id,
-      v.label AS vehicle,
+      v.name AS vehicle,
       s.feature_id,
-      f.label AS feature
+      f.name AS feature
     FROM case_suspect_pool s
     JOIN attr_sex sx ON sx.id = s.sex_id
     JOIN attr_hair h ON h.id = s.hair_id

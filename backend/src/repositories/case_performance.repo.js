@@ -5,7 +5,7 @@ export async function insertCasePerformance({ id, caseId, playerId, difficultyCo
     INSERT INTO case_performance (
       id,
       case_id,
-      player_id,
+      profile_id,
       difficulty_code,
       visits_count,
       route_errors,
