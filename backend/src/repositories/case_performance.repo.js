@@ -1,6 +1,7 @@
+// src/repositories/case_performance.repo.js
 import pool from '../config/database.js';
 
-export async function insertCasePerformance({ id, caseId, playerId, difficultyCode, visitsCount = 0, routeErrors = 0, finishedEarlierMinutes = 0, perfectPrecision = false, xpAwarded = 0, reputationDelta = 0 }) {
+export async function insertCasePerformance({ id, caseId, playerId, difficultyId, visitsCount = 0, routeErrors = 0, finishedEarlierMinutes = 0, perfectPrecision = false, xpAwarded = 0, reputationDelta = 0 }) {
   const sql = `
     INSERT INTO case_performance (
       id,
@@ -19,7 +20,7 @@ export async function insertCasePerformance({ id, caseId, playerId, difficultyCo
     id,
     caseId,
     playerId,
-    difficultyCode,
+    difficultyId, // INT conforme schema (difficulty_code INT)
     visitsCount,
     routeErrors,
     finishedEarlierMinutes,
@@ -34,7 +35,7 @@ export async function getCasePerformanceByCaseId(caseId) {
     SELECT cp.*, gd.code AS difficulty
     FROM case_performance cp
     LEFT JOIN active_cases ac ON ac.id = cp.case_id
-    LEFT JOIN game_difficulty gd ON gd.code = cp.difficulty_code OR gd.id = ac.difficulty_id
+    LEFT JOIN game_difficulty gd ON gd.id = ac.difficulty_id
     WHERE cp.case_id = ?
     ORDER BY cp.created_at DESC
     LIMIT 1

@@ -65,3 +65,15 @@ export async function clearSuspects(caseId) {
     [caseId]
   );
 }
+
+// Novo: preencher capture_place_id ao efetuar prisão
+export async function setCapturePlace(caseId, placeId) {
+  await pool.execute(
+    `
+    UPDATE active_cases
+    SET capture_place_id = ?
+    WHERE id = ?
+    `,
+    [placeId, caseId]
+  );
+}

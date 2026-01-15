@@ -3,10 +3,12 @@
  * Runner E2E – Operação Mônaco (MVP)
  * Executa fluxo automático via HTTP: Auth -> Perfil -> Caso -> (visit/investigate/travel) por step -> Warrant antes do último step
  * Consulta XP final e gera relatório detalhado passo-a-passo.
+ * Agora registra também o tempo in-game (ISO UTC) ao chegar na cidade e após cada visita.
  *
  * Uso:
  *   node tools/runner.js --base http://localhost:3333 --user "agente.nelliw" --pass secret123 --profile "Agente Nelliw" --difficulty EASY
  */
+
 import mysql from "mysql2/promise";
 import fs from "fs";
 import path from "path";
@@ -33,18 +35,16 @@ const DB_USER = process.env.DB_USER || "root";
 const DB_PASS = process.env.DB_PASSWORD || "BE-MySql666Dr@gon";
 const DB_NAME = process.env.DB_NAME || "project_detective";
 
-function nowIso() {
-  return new Date().toISOString();
-}
+function nowIso() { return new Date().toISOString(); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function http(method, pathUrl, body, token) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  // Optional debug hint header (backend may ignore if not implemented)
   headers['X-Debug'] = '1';
 
   const ctrl = new AbortController();
-  const timeoutMs = 30000; // 30s
+  const timeoutMs = 30000;
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   const endpoint = `${method} ${pathUrl}`;
 
@@ -60,44 +60,23 @@ async function http(method, pathUrl, body, token) {
     try { json = JSON.parse(txt); } catch {}
 
     if (!res.ok) {
-      // Extract backend error shape if present
       const errObj = json?.error || json || {};
       const requestId = errObj.requestId || errObj.request_id || null;
       const code = errObj.code || errObj.sqlState || null;
       const msg = errObj.message || errObj.sqlMessage || txt;
-
-      const detail = {
-        time: nowIso(),
-        endpoint,
-        status: `${res.status} ${res.statusText}`,
-        requestId,
-        code,
-        message: msg,
-        raw: txt?.slice(0, 1000), // cap long bodies
-      };
-      // Print helpful diagnostics to console
+      const detail = { time: nowIso(), endpoint, status: `${res.status} ${res.statusText}`, requestId, code, message: msg, raw: txt?.slice(0, 1000) };
       console.error('HTTP error diagnostics:', JSON.stringify(detail, null, 2));
-      // Throw enriched error so caller (main) can log/save
       throw new Error(`HTTP ${res.status} ${res.statusText}: ${msg}`);
     }
     return json || { raw: txt };
   } catch (e) {
-    // Distinguish between timeout and other failures
-    const info = {
-      time: nowIso(),
-      endpoint,
-      timeoutMs,
-      cause: String(e?.cause || ''),
-      error: String(e),
-    };
+    const info = { time: nowIso(), endpoint, timeoutMs, cause: String(e?.cause || ''), error: String(e) };
     console.error('Fetch failure diagnostics:', JSON.stringify(info, null, 2));
     throw e;
   } finally {
     clearTimeout(t);
   }
 }
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function saveReport(report, caseId) {
   try {
@@ -109,60 +88,71 @@ async function saveReport(report, caseId) {
   }
 }
 
-// Helpers de "trapaça" (consultas diretas)
+// Helpers de DB
 async function getRoute(conn, caseId) {
-  const [rows] = await conn.execute(
-    'SELECT step_order, city_id FROM case_route WHERE active_case_id = ? ORDER BY step_order ASC',
-    [caseId]
-  );
+  const [rows] = await conn.execute('SELECT step_order, city_id FROM case_route WHERE active_case_id = ? ORDER BY step_order ASC', [caseId]);
   return rows || [];
 }
-
 async function getTrueVillainId(conn, caseId) {
-  // Seleciona diretamente pelo flag is_culprit na tabela de suspeitos do caso
   try {
-    const [rows] = await conn.execute(
-      'SELECT id AS suspect_id FROM suspects WHERE active_case_id = ? AND is_culprit = 1 LIMIT 1',
-      [caseId]
-    );
-    if (rows && rows[0] && rows[0].suspect_id) return rows[0].suspect_id;
+    const [rows] = await conn.execute('SELECT id AS suspect_id FROM suspects WHERE active_case_id = ? AND is_culprit = 1 LIMIT 1', [caseId]);
+    if (rows?.[0]?.suspect_id) return rows[0].suspect_id;
   } catch {}
-  // Fallback 1: case_suspects com flags alternativos
   try {
-    const [rows2] = await conn.execute(
-      'SELECT suspect_id FROM case_suspects WHERE active_case_id = ? AND (is_culprit = 1 OR is_true = 1 OR is_villain = 1) LIMIT 1',
-      [caseId]
-    );
-    if (rows2 && rows2[0] && rows2[0].suspect_id) return rows2[0].suspect_id;
+    const [rows2] = await conn.execute('SELECT suspect_id FROM case_suspects WHERE active_case_id = ? AND (is_culprit = 1 OR is_true = 1 OR is_villain = 1) LIMIT 1', [caseId]);
+    if (rows2?.[0]?.suspect_id) return rows2[0].suspect_id;
   } catch {}
-  // Fallback 2: active_case.true_villain_id
   try {
-    const [rows3] = await conn.execute(
-      'SELECT true_villain_id AS suspect_id FROM active_case WHERE id = ? LIMIT 1',
-      [caseId]
-    );
-    if (rows3 && rows3[0] && rows3[0].suspect_id) return rows3[0].suspect_id;
+    const [rows3] = await conn.execute('SELECT true_villain_id AS suspect_id FROM active_case WHERE id = ? LIMIT 1', [caseId]);
+    if (rows3?.[0]?.suspect_id) return rows3[0].suspect_id;
   } catch {}
   return null;
 }
 
-// Sequência final controlada: visitar última cidade e investigar 2 NEXT_LOCATION + 1 VILLAIN
+// Helper: pegar timeState via API (padronizado ISO UTC)
+async function fetchCaseTimeState(caseId, token) {
+  try {
+    const info = await http('GET', `/api/v1/cases/${caseId}`, null, token);
+    return info?.timeState || null;
+  } catch { return null; }
+}
+
+// Reuso de caso ativo
+async function getActiveCase(token) {
+  try { const r = await http('GET', '/api/v1/cases/active', null, token); return r?.case || null; } catch { return null; }
+}
+
+// Retry em viagem
+async function travelWithRetry(report, caseId, cityId, token, label) {
+  for (let i = 0; i < 3; i++) {
+    const r = await http('POST', `/api/v1/cases/${caseId}/travel`, { cityId }, token);
+    report.steps.push({ action: label, to: cityId, response: r });
+    if (r.success) return true;
+    await sleep(500);
+  }
+  return false;
+}
+
+// Sequência final: 2 NEXT_LOCATION + 1 VILLAIN
 async function finalCitySequence(report, caseId, token) {
   try {
     const finalVisit = await http('GET', `/api/v1/cases/${caseId}/visit-current`, null, token);
-    report.steps.push({ action: 'visit_final_city', response: finalVisit });
+    const timeStateVisit = await fetchCaseTimeState(caseId, token);
+    report.steps.push({ action: 'visit_final_city', response: finalVisit, inGameTime: timeStateVisit });
     const places = finalVisit.places || [];
     const nextLocs = places.filter(p => p.clue_type === 'NEXT_LOCATION').slice(0, 2);
     const villainSpots = places.filter(p => p.clue_type === 'VILLAIN');
 
     for (const p of nextLocs) {
       const inv = await http('POST', `/api/v1/cases/${caseId}/investigate`, { placeId: p.id }, token);
-      report.steps.push({ action: 'investigate_final_next_location', placeId: p.id, response: inv });
+      const ts = await fetchCaseTimeState(caseId, token);
+      report.steps.push({ action: 'investigate_final_next_location', placeId: p.id, response: inv, inGameTime: ts });
       await sleep(100);
     }
     if (villainSpots[0]) {
       const invVillain = await http('POST', `/api/v1/cases/${caseId}/investigate`, { placeId: villainSpots[0].id }, token);
-      report.steps.push({ action: 'investigate_final_villain', placeId: villainSpots[0].id, response: invVillain });
+      const ts = await fetchCaseTimeState(caseId, token);
+      report.steps.push({ action: 'investigate_final_villain', placeId: villainSpots[0].id, response: invVillain, inGameTime: ts });
     } else {
       report.steps.push({ action: 'investigate_final_villain', error: 'Nenhum spot VILLAIN na última cidade' });
     }
@@ -171,11 +161,12 @@ async function finalCitySequence(report, caseId, token) {
   }
 }
 
+
 async function main() {
   const report = { baseUrl: BASE, difficulty: DIFF, steps: [], summary: {} };
 
-  // Auth
-  try { await http('POST', '/api/v1/auth/register', { username: USER, password: PASS }); } catch {}
+  // Auth (registro com email para evitar 400 validation) + login
+  try { await http('POST', '/api/v1/auth/register', { username: USER, password: PASS, email: `${USER}@local.test` }); } catch {}
   const login = await http('POST', '/api/v1/auth/login', { username: USER, password: PASS });
   const token = login.accessToken;
   report.summary.auth = { ok: !!token };
@@ -193,11 +184,18 @@ async function main() {
   }
   if (!profileId) throw new Error('Perfil não disponível');
 
-  // Caso
-  const createCase = await http('POST', '/api/v1/cases', { difficulty: DIFF }, token);
-  const caseId = createCase.case?.id;
-  report.steps.push({ action: 'create_case', request: { difficulty: DIFF }, response: createCase });
-  if (!caseId) throw new Error('Caso não criado');
+  // Caso: reuso se já houver um ACTIVE
+  let active = await getActiveCase(token);
+  let caseId;
+  if (active && active.status === 'ACTIVE') {
+    caseId = active.id;
+    report.steps.push({ action: 'reuse_active_case', caseId });
+  } else {
+    const createCase = await http('POST', '/api/v1/cases', { difficulty: DIFF }, token);
+    caseId = createCase.case?.id;
+    report.steps.push({ action: 'create_case', request: { difficulty: DIFF }, response: createCase });
+    if (!caseId) throw new Error('Caso não criado');
+  }
 
   // Conexão DB e "trapaças"
   const conn = await mysql.createConnection({ host: DB_HOST, port: DB_PORT, user: DB_USER, password: DB_PASS, database: DB_NAME });
@@ -208,39 +206,32 @@ async function main() {
   const trueVillainId = await getTrueVillainId(conn, caseId);
   report.summary.cheat = { lastCityId: lastStep.city_id, penultCityId: penultStep.city_id, trueVillainId };
 
-  // Flags/Fases
-  let phase = 1; // 1..5
-  let visitsInCurrentCity = 0;
+  let phase = 1;
   let currentStepOrder = route[0].step_order;
 
-  // Loop por passos
+  // Loop de passos
   for (let i = 0; i < route.length - 1; i++) {
-    // Visita atual
     const visit = await http('GET', `/api/v1/cases/${caseId}/visit-current`, null, token);
-    report.steps.push({ action: 'visit_current', response: visit });
-    visitsInCurrentCity = 0;
+    const tsVisit = await fetchCaseTimeState(caseId, token);
+    report.steps.push({ action: 'visit_current', response: visit, inGameTime: tsVisit });
     currentStepOrder = visit.city?.step_order || (i + 1);
-    phase = Math.min(currentStepOrder, 5); // mapeamento simples: step_order ~ fase
+    phase = Math.min(currentStepOrder, 5);
 
-    // Investigar todos os locais da cidade corrente
     const places = visit.places || [];
     for (const p of places) {
       const inv = await http('POST', `/api/v1/cases/${caseId}/investigate`, { placeId: p.id }, token);
-      report.steps.push({ action: 'investigate', placeId: p.id, response: inv });
-      visitsInCurrentCity++;
+      const tsInv = await fetchCaseTimeState(caseId, token);
+      report.steps.push({ action: 'investigate', placeId: p.id, response: inv, inGameTime: tsInv });
       await sleep(100);
     }
 
-    // Se concluímos todas as visitas da fase 4, preparar fase final (5): emitir mandado do vilão verdadeiro e viajar para última cidade
+    // Preparar fase final na fase 4
     if (phase === 4) {
       try {
-        // Escolher suspeito correto prioritariamente via DB (is_culprit)
         let suspectId = trueVillainId;
         if (!suspectId) {
-          // Fallback pela API: tentar achar o flag equivalente
           const suspects = await http('GET', `/api/v1/cases/${caseId}/suspects`, null, token);
-          suspectId = (suspects.suspects?.find?.(s => s?.is_culprit === 1 || s?.is_culprit === true)?.id)
-                   || null;
+          suspectId = (suspects.suspects?.find?.(s => s?.is_culprit === 1 || s?.is_culprit === true)?.id) || null;
         }
         if (suspectId) {
           const warrant = await http('POST', `/api/v1/cases/${caseId}/warrant`, { suspectId }, token);
@@ -251,28 +242,25 @@ async function main() {
       } catch (e) {
         report.steps.push({ action: 'warrant_true_villain', error: String(e) });
       }
-      // Viajar para a última cidade e executar sequência final
-      try {
-        const travelFinal = await http('POST', `/api/v1/cases/${caseId}/travel`, { cityId: lastStep.city_id }, token);
-        report.steps.push({ action: 'travel_to_final_city', to: lastStep.city_id, response: travelFinal });
-      } catch (e) {
-        report.steps.push({ action: 'travel_to_final_city', to: lastStep.city_id, error: String(e) });
+      const okFinal = await travelWithRetry(report, caseId, lastStep.city_id, token, 'travel_to_final_city');
+      if (!okFinal) {
+        // Mesmo sem sucesso, tente sequência final (visita final ajusta visão)
+        await finalCitySequence(report, caseId, token);
+      } else {
+        await finalCitySequence(report, caseId, token);
       }
-      await finalCitySequence(report, caseId, token);
       phase = 5;
-      break; // encerra loop normal; fase final já executada
+      break;
     }
 
-    // Se não é fase 4, seguir rota perfeita normalmente
-    const nextCityId = route[i+1].city_id;
-    // Penúltimo passo (fallback defensivo): garantir mandado e sequência final mesmo que lógica acima não dispare
+    // Penúltimo passo: fallback defensivo
+    const nextCityId = route[i + 1].city_id;
     if (i === route.length - 2) {
       try {
         let suspectId = trueVillainId;
         if (!suspectId) {
           const suspects = await http('GET', `/api/v1/cases/${caseId}/suspects`, null, token);
-          suspectId = (suspects.suspects?.find?.(s => s?.is_culprit === 1 || s?.is_culprit === true)?.id)
-                   || null;
+          suspectId = (suspects.suspects?.find?.(s => s?.is_culprit === 1 || s?.is_culprit === true)?.id) || null;
         }
         if (suspectId) {
           const warrant = await http('POST', `/api/v1/cases/${caseId}/warrant`, { suspectId }, token);
@@ -283,20 +271,20 @@ async function main() {
       } catch (e) {
         report.steps.push({ action: 'warrant_penult_fallback', error: String(e) });
       }
-      try {
-        const travel = await http('POST', `/api/v1/cases/${caseId}/travel`, { cityId: nextCityId }, token);
-        report.steps.push({ action: 'travel_to_final_city', to: nextCityId, response: travel });
-      } catch (e) {
-        const msg = String(e);
-        report.steps.push({ action: 'travel_to_final_city', to: nextCityId, error: msg });
+      const okFinalPenult = await travelWithRetry(report, caseId, nextCityId, token, 'travel_to_final_city');
+      if (!okFinalPenult) {
+        await finalCitySequence(report, caseId, token);
+      } else {
+        await finalCitySequence(report, caseId, token);
       }
-      await finalCitySequence(report, caseId, token);
       break;
     }
+
     // Passos intermediários
     try {
       const travel = await http('POST', `/api/v1/cases/${caseId}/travel`, { cityId: nextCityId }, token);
-      report.steps.push({ action: 'travel', to: nextCityId, response: travel });
+      const tsTravel = await fetchCaseTimeState(caseId, token);
+      report.steps.push({ action: 'travel', to: nextCityId, response: travel, inGameTime: tsTravel });
     } catch (e) {
       const msg = String(e);
       report.steps.push({ action: 'travel', to: nextCityId, error: msg });
@@ -309,32 +297,39 @@ async function main() {
     }
   }
 
-  // Tempo e XP
-  const [tsRows] = await conn.execute('SELECT start_time, deadline_time, current_time FROM case_time_state WHERE case_id = ? LIMIT 1', [caseId]);
-  report.summary.timeState = tsRows[0] || null;
+  // Tempo e XP (usando API para timeState ISO)
+  const timeSummary = await fetchCaseTimeState(caseId, token);
+  report.summary.timeState = timeSummary || null;
 
-  const [xpRows] = await conn.execute('SELECT xp_awarded, breakdown_json FROM player_xp_history WHERE case_id = ?', [caseId]);
+  const conn2 = await mysql.createConnection({ host: DB_HOST, port: DB_PORT, user: DB_USER, password: DB_PASS, database: DB_NAME });
+  const [xpRows] = await conn2.execute('SELECT xp_awarded, breakdown_json FROM player_xp_history WHERE case_id = ?', [caseId]);
   report.summary.xpHistory = xpRows || [];
 
-  // Checar status do caso via API
+  // Checar status; se ainda ACTIVE, reforçar sequência final
   try {
     const caseInfo = await http('GET', `/api/v1/cases/${caseId}`, null, token);
     report.summary.caseStatus = caseInfo.case?.status || caseInfo.status || null;
     report.steps.push({ action: 'check_case_status', response: caseInfo });
+    if (caseInfo.case?.status === 'ACTIVE') {
+      await finalCitySequence(report, caseId, token);
+      // tentar ler XP novamente
+      const [xpRows2] = await conn2.execute('SELECT xp_awarded, breakdown_json FROM player_xp_history WHERE case_id = ?', [caseId]);
+      report.summary.xpHistory = xpRows2 || report.summary.xpHistory;
+    }
   } catch (e) {
     report.summary.caseStatusError = String(e);
     report.steps.push({ action: 'check_case_status', error: String(e) });
   }
 
   await conn.end();
+  await conn2.end();
 
-  // Salvar relatório
   await saveReport(report, caseId);
   console.log('Runner concluído.');
   console.log(JSON.stringify({ caseId, steps: report.steps.length, timeState: report.summary.timeState, xp: report.summary.xpHistory, status: report.summary.caseStatus, cheat: report.summary.cheat }, null, 2));
 }
 
-main().catch(async err => { 
+main().catch(async err => {
   console.error('Falha no runner:', err);
   try { await saveReport({ error: String(err) }, 'error'); } catch {}
   process.exit(1);
