@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Press Start 2P", system-ui, cursive;
+  --font-body: "VT323", monospace;
+  --font-mono: "Share Tech Mono", monospace;
+
+  --color-background: 220 90% 8%;
+  --color-foreground: 45 20% 90%;
+
+  --color-primary: 45 100% 50%;
+  --color-secondary: 180 80% 40%;
+  --color-destructive: 0 80% 50%;
+}
+
+body {
+  background-color: oklch(0.12 0.02 260);
+  color: oklch(0.95 0.05 90);
+  font-family: var(--font-body);
+  font-size: 16px;
+  background-image:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 2px, 2px 100%;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  color: var(--color-primary);
+  text-transform: uppercase;
+}
+
+.retro-card {
+  background-color: oklch(0.15 0.02 260);
+  border: 2px solid oklch(0.30 0.05 260);
+  padding: 1.5rem;
+  box-shadow: 4px 4px 0px 0px rgba(251, 191, 36, 0.2);
+}
+
+.retro-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: oklch(0.75 0.18 55);
+  color: oklch(0.12 0.02 260);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s;
+}
+
+.retro-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 0.5);
+}
+
+.marker {
+  width: 10px;
+  height: 10px;
+  background: #ff3c00;
+  border-radius: 50%;
+  position: relative;
+}
+
+.marker::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 1px solid rgba(255, 60, 0, 0.6);
+  border-radius: 50%;
+  animation: radar 1.5s infinite ease-out;
+}
+
+@keyframes radar {
+  0% {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}

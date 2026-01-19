@@ -13,6 +13,21 @@
     },
     {
       "path": "./.nuxt/tsconfig.node.json"
-    }
-  ]
+    },
+  ],
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "lib": ["ESNext", "DOM"],
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./*"],
+      "@/*": ["./*"]
+    },
+    "types": ["@types/node"],
+    "skipLibCheck": true,
+    "strict": false
+  },
+  "exclude": ["node_modules", ".nuxt", ".output"]
 }
