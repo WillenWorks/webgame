@@ -64,6 +64,7 @@ logs/
 *.temp
 *.old
 *.bak
+.env
 
 # Arquivos de upload temporário (se houver)
 uploads/

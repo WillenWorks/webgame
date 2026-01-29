@@ -55,7 +55,7 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({
     ok: false,
-    error: { requestId: req.requestId, code: 'INTERNAL_ERROR', message: 'Internal server error' }
+    error: { requestId: req.requestId, code: 'INTERNAL_ERROR', message: 'Internal server error', method: req.method, path: req.path },
   });
 });
 

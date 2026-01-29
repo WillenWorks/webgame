@@ -1,4 +1,3 @@
-      
 <template>
   <button 
     class="retro-btn"
@@ -27,5 +26,3 @@ defineProps({
 })
 defineEmits(['click'])
 </script>
-
-    

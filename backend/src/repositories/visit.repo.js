@@ -34,7 +34,7 @@ export async function getCurrentCityByCase(caseId) {
 
   // 3) Retorna cidade com nomes
   const [cityRows] = await pool.execute(
-    `SELECT ? AS step_order, c.id AS city_id, c.name AS city_name, c.geo_coordinates as geo_coordinates, co.name AS country_name
+    `SELECT ? AS step_order, c.id AS city_id, c.name AS city_name, c.geo_coordinates as geo_coordinates, co.name AS country_name, c.description_prompt as description_prompt, c.image_url as image_url
      FROM cities c
      JOIN countries co ON co.id = c.country_id
      WHERE c.id = ?

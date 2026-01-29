@@ -1,75 +1,37 @@
-# Nuxt Minimal Starter
+# Operação Mundo - Frontend (Nuxt 3 Pixel Art)
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Interface moderna e estilizada para o jogo "Operação Mundo", construída com Nuxt 3 e TailwindCSS v4.
 
-## Setup
+## Estrutura do Projeto
 
-Make sure to install dependencies:
+- `assets/css/main.css`: Tema global (Pixel Art / Retro Spy).
+- `components/ui`: Componentes reutilizáveis (`RetroCard`, `RetroButton`).
+- `composables`:
+  - `useApi.ts`: Cliente HTTP com suporte a Token JWT.
+  - `useAuth.ts`: Gerenciamento de Login/Registro.
+  - `useGame.ts`: Estado do jogo (Perfil, Casos, Viagem).
+- `pages`:
+  - `index.vue`: Tela de Boot.
+  - `login.vue`: Autenticação.
+  - `dashboard.vue`: QG do Agente (Criação de Perfil / Lista de Missões).
+  - `cases/[id]/map.vue`: Mapa Mundi.
+  - `cases/[id]/city.vue`: Investigação.
 
-```bash
-# npm
-npm install
+## Como Rodar
 
-# pnpm
-pnpm install
+1. Instale as dependências:
+   ```bash
+   npm install
+   ```
 
-# yarn
-yarn install
+2. Inicie o servidor de desenvolvimento:
+   ```bash
+   npm run dev
+   ```
 
-# bun
-bun install
-```
+3. Acesse `http://localhost:3000`.
 
-## Development Server
+## Integração com Backend
 
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
-```
-
-## Production
-
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+O frontend espera a API rodando em `http://localhost:3333/api/v1`.
+Configure via variável de ambiente `NUXT_PUBLIC_API_BASE_URL` se necessário.

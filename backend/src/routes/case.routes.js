@@ -10,10 +10,11 @@ import {
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 import { visitCurrentCityController } from '../controllers/visit.controller.js';
 import { investigateController } from '../controllers/investigate.controller.js';
-import { travelController } from '../controllers/travel.controller.js';
+import { travelController, getTravelQuoteController } from '../controllers/travel.controller.js';
 import { listSuspectsController } from '../controllers/suspect.controller.js';
 import { getCasePerformanceController } from '../controllers/case_performance.controller.js';
 import { listTravelLogController } from '../controllers/travel_log.controller.js';
+import { getRevealedCluesController } from '../controllers/clue.controller.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -40,9 +41,15 @@ router.get('/:caseId/visit-current', validateParams(caseIdParams), visitCurrentC
 // GET /cases/:caseId/travel-log
 router.get('/:caseId/travel-log', validateParams(caseIdParams), listTravelLogController);
 
+// GET /cases/:caseId/clues/revealed
+router.get('/:caseId/clues/revealed', validateParams(caseIdParams), getRevealedCluesController);
+
 // POST /cases/:caseId/investigate (body: placeId)
 const investigateBody = z.object({ placeId: zId });
 router.post('/:caseId/investigate', validateParams(caseIdParams), validateBody(investigateBody), investigateController);
+
+// GET /cases/:caseId/travel/quote?to=123
+router.get('/:caseId/travel/quote', validateParams(caseIdParams), getTravelQuoteController);
 
 // POST /cases/:caseId/travel (body: cityId)
 const travelBody = z.object({ cityId: zNum });

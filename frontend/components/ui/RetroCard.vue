@@ -1,4 +1,3 @@
-      
 <template>
   <div class="retro-card" :class="extraClass">
     <div v-if="title || $slots.header" class="flex flex-col space-y-1.5 p-6 border-b-2 border-slate-700 bg-slate-800/50">
@@ -22,5 +21,3 @@ defineProps({
   extraClass: String
 })
 </script>
-
-    

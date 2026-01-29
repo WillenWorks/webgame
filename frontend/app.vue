@@ -1,4 +1,3 @@
-<!-- app.vue -->
 <template>
   <div>
     <NuxtLayout>

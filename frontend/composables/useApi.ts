@@ -1,50 +1,59 @@
+// composables/useApi.ts
 // @ts-ignore
 import { useRuntimeConfig, useCookie } from '#app'
-import { useRouter } from 'vue-router'
 
 export const useApi = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:3333/api/v1'
-
-  const token = useCookie<string | null>('auth_token', {
+  
+  // Use 'watch: true' to ensure reactivity across the app
+  const token = useCookie('auth_token', {
     watch: true,
-    default: () => null
+    default: () => null,
+    path: '/'
   })
 
-  const router = useRouter()
-
+  // @ts-ignore
   return $fetch.create({
     baseURL,
+    onRequest({ options }) {
+      const tokenValue = token.value
 
-    onRequest({ request, options }) {
-      if (token.value) {
-        options.headers = {
-          ...(options.headers || {}),
-          Authorization: `Bearer ${token.value}`
-        } as any
+      // Initialize headers
+      options.headers = options.headers || {}
+      
+      if (tokenValue) {
+        // Ensure we don't double-prefix Bearer
+        const authHeader = tokenValue.startsWith('Bearer ') 
+          ? tokenValue 
+          : `Bearer ${tokenValue}`
+          
+        // Handle different header formats (Headers object vs plain object)
+        if (options.headers instanceof Headers) {
+          options.headers.set('Authorization', authHeader)
+        } else {
+          // @ts-ignore
+          options.headers['Authorization'] = authHeader
+        }
+        
+        console.log('[useApi] Setting Auth Header:', authHeader.substring(0, 15) + '...')
+      } else {
+        console.warn('[useApi] No token found in cookie during request')
       }
-
-      console.log(
-        `[API] ${options.method || 'GET'} ${request} | Token: ${token.value ? 'OK' : 'NONE'}`
-      )
+      
+      console.log(`[API] ${options.method || 'GET'} ${options.url}`)
     },
-
     async onResponseError({ response }) {
-      console.error(
-        '[API ERROR]',
-        response.status,
-        response._data?.message || response.statusText
-      )
-
+      console.error('API Error:', response.status, response._data?.message || response.statusText)
+      
       if (response.status === 401) {
-        token.value = null
-        router.push('/login')
-        return
+        console.warn('[useApi] 401 Unauthorized - Clearing token and redirecting')
+        if (token.value) token.value = null
+        
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          window.location.href = '/login'
+        }
       }
-
-      throw new Error(
-        response._data?.message || 'Erro na comunicação com o servidor'
-      )
     }
   })
 }

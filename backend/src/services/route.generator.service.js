@@ -56,7 +56,8 @@ export async function generateRouteService({
   const effectiveOptionsPerStep = optionsPerStep ?? decoyTarget + 1; // +1 inclui a correta
 
   // 1️⃣ Buscar cidades disponíveis
-  const [cities] = await pool.execute(`
+  const [cities] = await pool.execute(
+    `
     SELECT
       c.id,
       c.name,
@@ -64,9 +65,8 @@ export async function generateRouteService({
       ST_Y(c.geo_coordinates) AS lat,
       ST_X(c.geo_coordinates) AS lng
     FROM cities c
-    ORDER BY RAND()
-    LIMIT ?
-  `);
+    ORDER BY RAND()`,
+  );
 
   const route = [];
   const usedCities = new Set();

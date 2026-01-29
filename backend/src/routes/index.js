@@ -6,6 +6,7 @@ import routeRoutes from "./route.routes.js";
 import warrantRoutes from "./warrant.routes.js";
 import suspectRoutes from "./suspect.routes.js";
 import dossierRoutes from "./dossier.routes.js";
+import cityRoutes from "./city.routes.js";
 
 export default function registerRoutes(app) {
   app.use("/api/v1/dev", devRoutes);
@@ -15,5 +16,6 @@ export default function registerRoutes(app) {
   app.use("/api/v1/routes", routeRoutes);
   app.use("/api/v1", warrantRoutes);
   app.use("/api/v1/cases", suspectRoutes); // /cases/:caseId/suspects/filter
-  app.use("/api/v1/cases", dossierRoutes);  // /cases/:caseId/dossier
+  app.use("/api/v1/cases", dossierRoutes); // /cases/:caseId/dossier
+  app.use("/api/v1/city", cityRoutes);
 }

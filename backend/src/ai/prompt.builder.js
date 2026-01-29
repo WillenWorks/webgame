@@ -14,6 +14,7 @@ import { AI_INTENT } from "./ai.types.js";
  *     truth?: { targetType: 'CITY'|'VILLAIN_ATTR'|'NONE', targetValue?: string },
  *     mode?: 'primary'|'decoy'|'final',
  *     phase?: number // 1..5
+ *     clue_type?: 'WARNING'|'CAPTURE'|'NEXT_LOCATION'|'VILLAIN_ATTRIBUTE'
  *   }
  */
 export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, context }) {
@@ -25,111 +26,102 @@ export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, c
 
   const safeDifficulty = Math.max(0.8, Math.min(1.5, Number(difficulty) || 1.0));
   const subtlety = safeDifficulty >= 1.2 ? "ALTA" : safeDifficulty >= 1.0 ? "MEDIA" : "BAIXA";
-  const mode = context?.mode || "primary"; // "decoy" ou "final" também
-  const phase = context?.phase || null;
+  const mode = context?.mode || "primary"; 
   const targetType = context?.truth?.targetType || "NONE";
   const targetValue = context?.truth?.targetValue || null;
+  const clueType = context?.clue_type || "NEXT_LOCATION";
 
   // Regras dinâmicas por modo
   const modeRules = {
     primary: [
       "Forneça uma pista sutil mas útil sobre o destino correto.",
       "Não entregue nomes diretamente; use referência cultural/indireta.",
+      "Insira a pista organicamente na fala, como quem comenta algo casualmente.",
     ],
     decoy: [
       "Não revele pistas úteis. Dê um aviso de que nada relevante foi visto aqui.",
-      "Evite mencionar o destino correto. Foque em informação vaga/irrelevante.",
+      "Evite mencionar o destino correto. Foque em reclamar do clima, falar de política local ou dar uma desculpa.",
+      "Seja evasivo ou confuso, mas mantenha a personalidade do arquétipo.",
     ],
     final: [
-      "Não há mais pistas. Emita mensagens de alerta ou proximidade.",
-      "Se a captura for possível, mantenha tensão sem revelar localização exata.",
+      "Não há mais pistas geográficas.",
+      "Se a captura for possível, demonstre medo ou urgência ('Vi alguém suspeito correndo ali!').",
     ],
   }[mode] || [];
+
+  // Regras Especiais para Warning e Capture
+  if (clueType === 'WARNING') {
+    modeRules.push(
+      "O detetive está procurando no lugar errado. O NPC deve ser hostil ou avisar que ele está perdendo tempo.",
+      "Não dê nenhuma informação útil. Apenas desencoraje.",
+      "Exemplo: 'Você não devia estar aqui.', 'Sinto que você está seguindo sombras.'"
+    );
+  } else if (clueType === 'CAPTURE') {
+    modeRules.push(
+      "O criminoso está AQUI e AGORA.",
+      "O NPC deve gritar ou avisar com urgência.",
+      "Exemplo: 'Ele correu para lá!', 'Peguem-no agora!'"
+    );
+  }
+
+  // Regras de Reputação
+  let reputationRules = "";
+  if (reputation === "ALTA") {
+    reputationRules = "O NPC reconhece o detetive e é prestativo, admirado ou respeitoso. ('É uma honra ajudar a ACME!').";
+  } else if (reputation === "BAIXA") {
+    reputationRules = "O NPC é desconfiado, ríspido ou relutante. Só fala o necessário e com má vontade.";
+  } else {
+    reputationRules = "O NPC é neutro, trata o detetive como um estranho qualquer.";
+  }
 
   // Regras por tipo de alvo
   const targetRules = [];
   if (targetType === "CITY") {
     targetRules.push(
-      "A pista deve apontar indiretamente para a próxima cidade (marco, moeda, tradição).",
-      "Evite nomes explícitos; prefira indícios culturais reconhecíveis."
+      "A pista deve apontar indiretamente para a próxima cidade (marco, moeda, tradição, geografia, clima, bandeira).",
+      "EVITE REPETIR 'MOEDA'. Varie entre comida típica, roupas, monumentos, animais locais ou fatos históricos.",
+      "Exemplo BOM: 'Ele queria trocar dinheiro por Yens.' / 'Ele perguntou onde ficava a Torre Eiffel.'",
+      "Exemplo RUIM: 'Ele foi para Paris.' (Muito direto)",
     );
   } else if (targetType === "VILLAIN_ATTR") {
     targetRules.push(
-      "A pista deve sugerir discretamente um atributo do vilão (ex.: veículo, hobby, cabelo, traço).",
-      "Descreva como comentário ouvido/observado por terceiros."
+      "A pista deve sugerir discretamente um atributo do vilão (veículo, hobby, cabelo, traço).",
+      "Descreva como comentário ouvido/observado. Ex: 'Vi alguém com um anel estranho.' ou 'Ele lia um livro sobre montanhismo.'",
     );
-  } else {
-    targetRules.push("Se não houver alvo útil, produza observação genérica ou aviso cauteloso.");
+  } else if (clueType !== 'WARNING' && clueType !== 'CAPTURE') {
+    targetRules.push("Se não houver alvo útil, produza observação genérica sobre o dia ou a cidade.");
   }
 
-  // Graduação de sutileza conforme dificuldade
-  const subtleGuidance = {
-    ALTA: [
-      "Use metáforas leves e referências indiretas (1–2 palavras-chave no máximo).",
-      "Evite qualquer indício que facilite adivinhação direta.",
-    ],
-    MEDIA: [
-      "Use uma referência cultural evidente, porém sem dizer nomes.",
-      "Permaneça em 2 frases curtas e naturais.",
-    ],
-    BAIXA: [
-      "Use menção indireta com uma dica reconhecível (ex.: moeda, monumento famoso).",
-      "Ainda sem nomes diretos; não revele a resposta completa.",
-    ],
-  }[subtlety];
-
   const system = `
-Você é um NPC de um jogo de detetive (Carmen-style) falando em português brasileiro.
+Você é um NPC de um jogo de detetive estilo Carmen Sandiego, localizado na cidade de ${context?.city || "Desconhecida"}.
+Você fala Português Brasileiro (pt-BR).
+
+SUA PERSONALIDADE: ${archetype || "Cidadão Comum"}
+SUA ATITUDE: ${reputationRules}
 
 Regras ABSOLUTAS:
-- Fale SEMPRE em pt-BR.
-- NUNCA invente fatos.
-- NUNCA contradiga os dados fornecidos.
-- NUNCA revele respostas explícitas (nomes diretos de cidades/países).
-- Máximo de 2 frases curtas por resposta.
-- Tom de fala de NPC, com naturalidade e leveza.
-- Não descreva ações do jogador nem cenas longas.
-- Quando o contexto for decoy, a fala NÃO deve ajudar o jogador a avançar.
+- Fale como uma pessoa real, não como um sistema.
+- NUNCA use termos como 'jogador', 'NPC', 'pista', 'decoy', 'jogo', 'mapa', 'interface'.
+- Mantenha a imersão total (Diegético).
+- Resposta curta (máximo 2 frases).
+- Se for dar uma pista, não seja óbvio demais, mas seja justo.
 `.trim();
-
-  const guidanceBlocks = [
-    `Arquetipo: ${archetype || "NPC"}`,
-    `Reputação do jogador: ${reputation || "NEUTRA"}`,
-    `Fase: ${phase ?? ""}`,
-    `Dificuldade: ${subtlety}`,
-    `Modo: ${mode}`,
-    `Cidade atual: ${context?.city || "(desconhecida)"}`,
-  ].filter(Boolean).join("\n");
-
-  const targetBlock = `
-Alvo narrativo:
-- Tipo: ${targetType}
-- Valor indireto: ${targetValue ?? "(nenhum)"}
-`.trim();
-
-  const rulesBlock = [
-    "Orientações do modo:",
-    ...modeRules,
-    "\nOrientações do alvo:",
-    ...targetRules,
-    "\nSutileza (graduação pela dificuldade):",
-    ...subtleGuidance,
-  ].join("\n- ");
 
   const user = `
-INTENÇÃO: ${intent}
+CONTEXTO DO ENCONTRO:
+- O detetive perguntou se você viu alguém suspeito recentemente.
+- Tipo de Interação: ${clueType}
+- Dificuldade/Sutileza: ${subtlety}
 
-${guidanceBlocks}
+INFORMAÇÃO VERDADEIRA (A PISTA):
+- Tipo: ${targetType}
+- Conteúdo: ${targetValue ?? "(Nenhuma informação relevante)"}
 
-${targetBlock}
+ORIENTAÇÕES ESPECÍFICAS:
+${modeRules.join("\n")}
+${targetRules.join("\n")}
 
-${rulesBlock}
-
-Saída desejada:
-- 2 frases curtas.
-- Linguagem natural de NPC.
-- Evite nomes explícitos; use indícios.
-- Se decoy, produza aviso sutil sem pista útil.
+Gere a resposta do personagem:
 `.trim();
 
   return { system, user };

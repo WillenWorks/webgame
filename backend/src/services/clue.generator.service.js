@@ -3,102 +3,68 @@ import { guardAIResponse } from '../ai/ai.guard.js';
 import { callOpenAI } from '../ai/openai.client.js';
 import { AI_INTENT } from '../ai/ai.types.js';
 
-/**
- * Gera uma pista textual para o jogador.
- *
- * REGRA FUNDAMENTAL:
- * - O BACKEND define a verdade da pista
- * - A IA apenas transforma dados estruturados em narrativa curta
- * - Se algo estiver inconsistente, usa fallback
- */
 export async function generateClue({
   archetype,
   reputation,
   clueData,
-  fallbackText
+  fallbackText,
+  context // city, etc.
 }) {
-  /**
-   * clueData SEMPRE vem do banco (case_clues + joins)
-   *
-   * Exemplos esperados:
-   *
-   * NEXT_LOCATION:
-   * {
-   *   clue_type: 'NEXT_LOCATION',
-   *   target_type: 'CITY',
-   *   target_value: 'Cairo'
-   * }
-   *
-   * VILLAIN_ATTRIBUTE:
-   * {
-   *   clue_type: 'VILLAIN_ATTRIBUTE',
-   *   target_value: 'hobby',
-   *   resolved_value: 'Tênis'
-   * }
-   *
-   * WARNING / CAPTURE:
-   * {
-   *   clue_type: 'WARNING'
-   * }
-   */
-
-  // 🛑 Blindagem total: se não houver dados mínimos
   if (!clueData || !clueData.clue_type) {
     return {
-      text: fallbackText || 'Nada de útil foi encontrado aqui.',
+      text: fallbackText || 'Não vi ninguém estranho por aqui hoje. O dia está tranquilo.',
       meta: null
     };
   }
 
-  // WARNING e CAPTURE não usam IA
-  if (clueData.clue_type === 'WARNING') {
-    return {
-      text: fallbackText || 'Você sente que está muito perto de algo perigoso.',
-      meta: null
-    };
-  }
-
-  if (clueData.clue_type === 'CAPTURE') {
-    return {
-      text: fallbackText || 'Tudo indica que o criminoso está escondido aqui.',
-      meta: null
-    };
-  }
-
-  // 🔹 Contexto seguro para IA
-  const context = {
-    clue_type: clueData.clue_type
+  // Preparar contexto para o prompt
+  const promptContext = {
+    ...context,
+    clue_type: clueData.clue_type,
+    truth: {
+      targetType: 'NONE',
+      targetValue: null
+    }
   };
 
   if (clueData.clue_type === 'NEXT_LOCATION') {
-    context.destination = {
-      type: clueData.target_type,
-      value: clueData.target_value
-    };
+    promptContext.truth.targetType = clueData.target_type; // 'CITY'
+    promptContext.truth.targetValue = clueData.target_value; // Nome da cidade ou dica cultural
   }
 
   if (clueData.clue_type === 'VILLAIN_ATTRIBUTE') {
-    context.attribute = {
-      type: clueData.target_value,
-      value: clueData.resolved_value
-    };
+    promptContext.truth.targetType = 'VILLAIN_ATTR';
+    promptContext.truth.targetValue = `${clueData.target_value}: ${clueData.resolved_value}`;
+  }
+  
+  // Agora WARNING e CAPTURE também passam pelo Prompt Builder para serem diegéticos
+  if (clueData.clue_type === 'WARNING' || clueData.clue_type === 'CAPTURE') {
+      promptContext.mode = 'decoy'; // Usa regras restritivas/urgentes
   }
 
-  // 1️⃣ Monta prompt de forma segura
+  // Construir prompt usando o novo builder com suporte a reputação
   const prompt = buildPrompt({
     intent: AI_INTENT.CLUE_TEXT,
     archetype,
-    reputation,
-    context
+    reputation, // "ALTA", "BAIXA", "NEUTRA"
+    difficulty: context?.difficulty || 1.0,
+    context: promptContext
   });
 
-  // 2️⃣ Executa IA com proteção
+  // Fallbacks temáticos por reputação (caso a IA falhe)
+  let fallback = 'Desculpe, estou com pressa.';
+  if (reputation === 'ALTA') fallback = 'Gostaria de ajudar, mas realmente não vi nada. Boa sorte, Agente!';
+  if (reputation === 'BAIXA') fallback = 'Não tenho nada para dizer a você. Circulando.';
+
+  // Fallbacks específicos para Warning/Capture se IA falhar
+  if (clueData.clue_type === 'WARNING') fallback = 'Você não deveria estar aqui. Vá embora.';
+  if (clueData.clue_type === 'CAPTURE') fallback = 'Lá está ele! Peguem o ladrão!';
+
   const text = await guardAIResponse({
     aiCall: () => callOpenAI(prompt),
-    fallback: fallbackText || 'A pessoa parece hesitar antes de dizer qualquer coisa.'
+    fallback: fallbackText || fallback
   });
 
-  // 3️⃣ Retorno padronizado
   return {
     text,
     meta: {

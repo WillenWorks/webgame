@@ -1,4 +1,3 @@
-      
 <template>
   <div class="flex items-center justify-center min-h-[80vh]">
     <div class="w-full max-w-md space-y-8">
