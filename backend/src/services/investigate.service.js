@@ -3,12 +3,12 @@ import { getCurrentCityByCase, getCityPlaceById } from "../repositories/visit.re
 import { getNextCityByCase, getStepOptions } from "../repositories/route.repo.js";
 import { getExistingClueByCityPlace, insertClue } from "../repositories/clue.repo.js";
 import { getCulpritByCase } from "../repositories/suspect.repo.js";
-import { getCaseById, solveCase, setCapturePlace } from "../repositories/warrant.repo.js";
+import { getCaseById, setCapturePlace } from "../repositories/warrant.repo.js";
 import { insertCapturedVillainLog } from "../repositories/captured.repo.js";
 import { getCurrentView } from "../repositories/current_view.repo.js";
-import { generateClue } from "./clue.generator.service.js"; // IMPORTANTE: usar a função refatorada
-import { consumeActionTime, getCaseTimeSummary } from "./time.service.js"; // Importar tempo
-import { getPlayerReputationLatestByPlayer } from '../repositories/player_reputation.repo.js';
+import { generateClue } from "./clue.generator.service.js"; 
+import { consumeActionTime, getCaseTimeSummary } from "./time.service.js"; 
+import { finishCaseService } from "./finish_case.service.js";
 
 export async function investigateService(caseId, cityPlaceId) {
   if (!cityPlaceId) throw new Error("cityPlaceId não informado");
@@ -19,11 +19,7 @@ export async function investigateService(caseId, cityPlaceId) {
   const place = await getCityPlaceById(caseId, cityPlaceId);
   if (!place || place.city_id !== city.city_id) throw new Error("Local inválido para a cidade atual");
 
-  // 1️⃣ Consumir tempo de investigação (ex: 1 hora / 60 min)
-  // Mas cuidado: se a pista já foi revelada, consome tempo de novo?
-  // Geralmente sim, falar com NPC gasta tempo. Mas se for só "reler", talvez não.
-  // Vamos assumir que sempre gasta tempo para simplificar ou mitigar spam.
-  // Vou usar 60 minutos como padrão de investigação.
+  // 1️⃣ Consumir tempo de investigação (60 min)
   const timeResult = await consumeActionTime({ 
     caseId, 
     minutes: 60, 
@@ -35,12 +31,13 @@ export async function investigateService(caseId, cityPlaceId) {
 
   // Verificar se o tempo acabou
   if (timeResult.failed) {
-    await solveCase(caseId, "FAILED");
-    return {
-      text: "O tempo esgotou! O vilão escapou enquanto você investigava.",
-      gameOver: true,
-      timeState
-    };
+    return await finishCaseService({
+      caseId,
+      status: "FAILED",
+      finalDialogue: "O tempo esgotou! O vilão escapou enquanto você investigava.",
+      timeState,
+      isDecoy: false
+    });
   }
 
   // 2️⃣ Verificar se é Local de Captura (Fase Final)
@@ -49,23 +46,22 @@ export async function investigateService(caseId, cityPlaceId) {
     const culprit = await getCulpritByCase(caseId);
 
     if (!gameCase.warrant_suspect_id) {
-      await solveCase(caseId, "FAILED"); // Game Over se tentar capturar sem mandado? Ou só aviso?
-      // Carmen Sandiego original: Se você acha o vilão sem mandado, ele escapa e o jogo continua (mas perde a chance se for o último dia).
-      // Aqui, vou simplificar: Retorna mensagem de falha na captura, mas não GAME OVER imediato, a menos que o tempo acabe.
-      // Mas se for o "Capture Location", geralmente é o fim da linha.
-      // Vou manter a lógica anterior: FAILED se não tiver mandado.
-      return {
-        text: "Você encontrou o suspeito, mas sem um mandado emitido, não pode efetuar a prisão! Ele fugiu!",
-        gameOver: true, // Falha na missão
-        timeState
-      };
+      // Falha se tentar capturar sem mandado
+      return await finishCaseService({
+        caseId,
+        status: "FAILED",
+        finalDialogue: "Você encontrou o suspeito, mas sem um mandado emitido, não pode efetuar a prisão! Ele fugiu!",
+        timeState,
+        isDecoy: false
+      });
     }
 
     const isCorrectWarrant = gameCase.warrant_suspect_id === culprit.id;
     const finalDialogue = isCorrectWarrant
       ? "Você cercou o vilão e efetuou a prisão sem incidentes! Bom trabalho, Detetive."
       : "Você prendeu a pessoa errada... O verdadeiro criminoso escapou!";
-
+      
+    // Registrar log de captura
     await insertCapturedVillainLog({
       id: uuid(),
       profileId: gameCase.profile_id,
@@ -82,23 +78,14 @@ export async function investigateService(caseId, cityPlaceId) {
     });
 
     try { await setCapturePlace(caseId, cityPlaceId); } catch {}
-    await solveCase(caseId, isCorrectWarrant ? "SOLVED" : "FAILED");
-
-    // Calcular XP/Reputação (omitido detalhe para brevidade, mas deve ser mantido)
-    // ... (Logica de XP mantida, chamar serviços auxiliares se necessário)
-    // Para simplificar este arquivo, assumo que a lógica de XP é chamada aqui ou via trigger/outro service.
-    // O código original tinha um bloco gigante de XP aqui. Idealmente, extrair para `xp.service.js`.
-    // Vou reincluir a chamada básica.
     
-    // (Lógica de XP simplificada/omitida para focar no fluxo do front. O original tinha 100 linhas disso)
-    // Importante: O original fazia tudo isso. Vou manter a chamada se possível.
-    
-    return {
-      text: finalDialogue,
-      gameOver: true,
-      solved: isCorrectWarrant,
-      timeState
-    };
+    return await finishCaseService({
+      caseId,
+      status: isCorrectWarrant ? "SOLVED" : "FAILED",
+      finalDialogue,
+      timeState,
+      isDecoy: false
+    });
   }
 
   // 3️⃣ Verificar Cache de Pista (se já visitou, retorna a mesma fala)
@@ -125,18 +112,20 @@ export async function investigateService(caseId, cityPlaceId) {
   let clueType = place.clue_type;
   let targetType = "NONE";
   let targetValue = null;
+  var resolvedAttrValue = null;
+  var targetRefId = null;
   
   // Determinar alvo da pista
   if (isDecoy) {
-    clueType = "WARNING"; // Decoy sempre avisa ou enrola
+    clueType = "WARNING"; 
   } else {
     if (clueType === "NEXT_LOCATION") {
       const nextCity = await getNextCityByCase(caseId, city.step_order);
       if (!nextCity) {
-        clueType = "WARNING"; // Fim da linha ou erro
+        clueType = "WARNING"; 
       } else {
         targetType = "CITY";
-        targetValue = nextCity.city_name; // O generator vai transformar isso em dicas culturais
+        targetValue = nextCity.city_name; 
       }
     } else if (clueType === "VILLAIN") {
       const culprit = await getCulpritByCase(caseId);
@@ -149,12 +138,9 @@ export async function investigateService(caseId, cityPlaceId) {
       const chosen = attrs[Math.floor(Math.random() * attrs.length)];
       clueType = "VILLAIN_ATTRIBUTE";
       targetType = "VILLAIN_ATTR";
-      targetValue = chosen.key; // ex: 'hobby'
-      // Passamos o valor resolvido (ex: 'Tênis') separadamente para o generator
-      // O generator espera clueData com target_value e resolved_value
-      // Vou ajustar o objeto clueData abaixo.
-      var resolvedAttrValue = chosen.label;
-      var targetRefId = chosen.ref;
+      targetValue = chosen.key; 
+      resolvedAttrValue = chosen.label;
+      targetRefId = chosen.ref;
     }
   }
 
@@ -167,14 +153,12 @@ export async function investigateService(caseId, cityPlaceId) {
   const profileId = prof?.profile_id;
   
   // Buscar reputação real
-  // Precisamos ler a reputação do profile ou do histórico.
-  // Vou ler da tabela profiles rapidinho
   const [[pRow]] = await (await import('../config/database.js')).default.execute('SELECT reputation_score FROM profiles WHERE id = ?', [profileId]);
   const score = pRow?.reputation_score || 0;
   
   let reputation = "NEUTRA";
   if (score > 1000) reputation = "ALTA";
-  if (score < 0) reputation = "BAIXA"; // Se existir mecânica de perder rep
+  if (score < 0) reputation = "BAIXA"; 
 
   // Gerar Pista (Texto)
   const clueResult = await generateClue({
@@ -184,7 +168,7 @@ export async function investigateService(caseId, cityPlaceId) {
       clue_type: clueType,
       target_type: targetType,
       target_value: targetValue,
-      resolved_value: resolvedAttrValue || null // Usado para villain attrs
+      resolved_value: resolvedAttrValue || null 
     },
     context: {
       city: city.city_name,
@@ -214,7 +198,7 @@ export async function investigateService(caseId, cityPlaceId) {
   return {
     text: generatedText,
     timeState,
-    clueType, // Front pode usar para ícone (ex: olho, mapa, alerta)
+    clueType, 
     revealed
   };
 }

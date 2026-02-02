@@ -21,7 +21,7 @@
 
         <!-- Global Clock Component (Only visible if game is active/time exists) -->
         <div class="flex-1 flex justify-center md:justify-end">
-           <GameClock />
+           <GameClock v-if="shouldShowClock" />
         </div>
 
       </div>
@@ -41,6 +41,25 @@
 
 <script setup>
 import GameClock from '@/components/GameClock.vue'
+import { computed } from 'vue'
+import { useGame } from '@/composables/useGame'
+import { useRoute } from 'vue-router'
+
+const { cases } = useGame()
+const route = useRoute()
+
+const shouldShowClock = computed(() => {
+  // Hide on dashboard, login, archives, etc
+  if (!route.path.includes('/cases/')) return false
+  // Only show if there is an active case data
+  if (!cases.value || cases.value.length === 0) return false
+  
+  // Optional: Hide if case is technically FAILED/SOLVED but user is still on screen?
+  // The user said: "After the case is closed... it ends with it".
+  // Assuming 'cases' array usually contains the active case. 
+  // If the backend filters out completed cases from 'active', then cases.length check is enough.
+  return true
+})
 </script>
 
 <style>

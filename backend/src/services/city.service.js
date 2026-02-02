@@ -1,6 +1,5 @@
 // services/city.service.js
 import { getCityById } from '../repositories/city.repo.js';
-import { getEntityImage } from './image.generator.service.js';
 
 export async function getCityByIdService(cityId) {
   if (!cityId) {
@@ -12,10 +11,9 @@ export async function getCityByIdService(cityId) {
     throw new Error('Cidade não encontrada');
   }
 
-  // Attach Image
-  // Using name + country as unique identifier/description
-  const description = `${city.city}, ${city.county || 'Unknown Country'}. Famous landmark or cityscape.`;
-  const imageUrl = await getEntityImage('city', city.id, description);
+  // Image generation disabled
+  // Using static placeholder
+  const imageUrl = '/images/city-placeholder.png';
 
   return {
     ...city,

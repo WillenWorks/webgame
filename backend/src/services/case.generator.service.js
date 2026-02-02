@@ -2,7 +2,6 @@
  * Base de dados de artefatos por região/país.
  * Quando a cidade não tiver match específico, usa 'General'.
  */
-import { getEntityImage } from './image.generator.service.js';
 
 const ARTIFACTS = {
   // Asia
@@ -25,7 +24,7 @@ const ARTIFACTS = {
 
 /**
  * Gera um objeto roubado e uma narrativa inicial baseada na cidade de partida.
- * Agora retorna também a URL da imagem do artefato (async).
+ * Image generation disabled.
  */
 export async function generateCaseMetadata(city) {
   const country = city?.country_name || 'General';
@@ -47,9 +46,8 @@ export async function generateCaseMetadata(city) {
 
   const intro = intros[Math.floor(Math.random() * intros.length)];
   
-  // Generate Image for the artifact
-  // Identifier = artifact name (normalized)
-  const imageUrl = await getEntityImage('artifact', artifact, `Valuable artifact: ${artifact}`);
+  // Image generation disabled
+  const imageUrl = '/images/artifact-placeholder.png';
 
   return {
     stolenObject: artifact,

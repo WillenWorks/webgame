@@ -21,10 +21,18 @@
 
       <!-- Main City Image -->
       <div class="relative h-[300px] w-full overflow-hidden group">
+         <!--
+            Correct logic for city images: /images/cities/city_name.jpg
+            Fallback to placeholder if not found.
+         -->
          <img 
-            :src="'/images/cities/' + currentCity?.image_url || currentCity?.imageUrl || '/images/city_bg.jpg'" 
+            v-if="currentCity?.city_name"
+            :src="getCityImageUrl(currentCity?.city_name)" 
             class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-1000" 
+            @error="handleCityImgError"
          />
+         <img v-else src="/images/city_bg.jpg" class="w-full h-full object-cover" />
+         
          <div class="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent"></div>
       </div>
 
@@ -38,12 +46,11 @@
          </div>
          
          <div class="flex flex-row md:flex-col gap-3 w-full md:w-auto min-w-[200px]">
+            <!-- Alterado para ir ao Dossier, conforme solicitado -->
             <RetroButton class="w-full" variant="danger" @click="openWarrant">
-              EMITIR MANDADO
+              DOSSIÊ / MANDADO
             </RetroButton>
-            <RetroButton class="w-full" variant="outline" @click="goToMap">
-              VIAJAR
-            </RetroButton>
+            <!-- Botão de Viajar removido pois é redundante com Voltar ao Mapa -->
          </div>
       </div>
 
@@ -51,7 +58,8 @@
 
     <!-- Main Interaction Area (Places List) -->
     <div class="flex-1 min-h-0">
-      <RetroCard title="LOCAIS DE INTERESSE" extraClass="border-cyan-500/50 flex flex-col h-full bg-slate-900/80">
+      <!-- Title changed from LOCAIS DE INTERESSE to LOCALIDADES -->
+      <RetroCard title="LOCALIDADES" extraClass="border-cyan-500/50 flex flex-col h-full bg-slate-900/80">
         <div v-if="isLoading && !places.length" class="flex justify-center p-8">
           <p class="animate-pulse text-cyan-400">ESCANEANDO ÁREA...</p>
         </div>
@@ -66,17 +74,14 @@
           >
             <div class="flex items-center gap-4">
               <div class="w-12 h-12 bg-black border border-slate-700 p-1 group-hover:border-amber-400 transition-colors flex items-center justify-center shrink-0">
-                <!-- Icon based on type? Using generic for now or dynamic if available -->
-                 <img v-if="getPlaceImage(place)" :src="getPlaceImage(place)" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" @error="handleImgError" />
-                 <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500 group-hover:text-amber-400"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                 <!-- Place Image -->
+                 <img :src="getPlaceImage(place)" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" @error="handleImgError" />
               </div>
               <div class="text-left">
                 <h3 class="text-lg font-display text-white group-hover:text-amber-400 transition-colors uppercase leading-tight">
                   {{ place.name }}
                 </h3>
-                <p class="text-xs text-slate-400 font-mono uppercase mt-1">
-                  {{ place.interaction_style || "Padrão" }}
-                </p>
+                <!-- Environment Type REMOVED as requested -->
               </div>
             </div>
           </button>
@@ -120,14 +125,13 @@
                @error="handleImgError"
              />
              <div class="absolute bottom-0 left-0 right-0 bg-black/70 p-1">
-                <span class="text-xs text-amber-500 font-mono uppercase">{{ selectedPlace.interaction_style }}</span>
+                <!-- Interaction Style REMOVED as requested (was environments types) -->
              </div>
           </div>
 
           <h3 class="text-2xl font-display text-white uppercase tracking-wider">VISITAR {{ selectedPlace.name }}?</h3>
           
           <div class="py-2 px-4 border-y border-dashed border-slate-700 bg-black/20">
-            <!-- Time cost hidden as requested -->
             <p class="text-slate-300 text-sm leading-relaxed">
                Deseja se deslocar até este local para interrogar testemunhas e buscar pistas?
             </p>
@@ -147,8 +151,11 @@
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
+import { useGame } from '~/composables/useGame'
 
 const route = useRoute()
 const router = useRouter()
@@ -195,42 +202,44 @@ const slugify = (text) => {
     .replace(/[^\w-]+/g, '')
 }
 
-const getPlaceImage = (place) => {
+const getCityImageUrl = (cityName) => {
+    // Logic: public/images/cities/nome-da-cidade.jpeg
+    // User requested "nome da cidade que vem do banco". 
+    // Usually filenames are lowercase slugified.
+    if (!cityName) return '/images/city_bg.jpg'
+    // Assuming .jpeg or .jpg. We try .jpeg first as per common assets
+    return `/images/cities/${slugify(cityName)}/aeroporto.jpeg`.replace('aeroporto.jpeg', '') + `${slugify(cityName)}.jpeg`
+    // Actually simpler: /images/cities/<slug>.jpeg 
+    // Wait, user said: "public/images/cities/'nome da cidade que vem do banco'"
+    // Let's assume just slugified name + extension. 
+    // Or if the folder structure is /images/cities/<city_id>/... 
+    // The user example for places was: public/images/cities/places/'id'/'place'.
+    // For cities: "public/images/cities/'nome'".
+    // Let's stick to a safe path construction.
+    
+    // Check if the structure is flat for cities:
+    return `/images/cities/${slugify(cityName)}.jpeg`
+}
 
+const getPlaceImage = (place) => {
     if (!currentCity.value || !place) return '/images/city_bg.jpg'
     
-    // Construct path: /images/cities/[city_slug]/[place_filename]
-    const citySlug = slugify(currentCity.value.city_id)
+    // User logic: "public/images/cities/places/'numero do id da cidade'/'nome da localidade'"
+    // City ID might be a UUID or Int. Let's use the ID from currentCity.
+    const cityId = currentCity.value.city_id // This should be the ID
+    const placeName = slugify(place.name)
     
-    // Assuming place object has image_filename from the updated backend/DB
-    // If not, we map based on place name as fallback
-    let filename = place.image_url
-    
-    if (!filename) {
-        // Fallback mapping based on common names if DB col is missing in API response yet
-        const map = {
-            'banco': 'banco.jpeg',
-            'biblioteca': 'biblioteca.jpeg',
-            'porto': 'porto.jpeg',
-            'mercado': 'mercado.jpeg',
-            'aeroporto': 'aeroporto.jpeg',
-            'museu': 'museu.jpeg'
-        }
-        const key = slugify(place.name)
-        // Check if key is in map (partial match)
-        Object.keys(map).forEach(k => {
-            if (key.includes(k)) filename = map[k]
-        })
-    }
-    
-    if (!filename) return null // Fallback to icon
-    return `/images/cities/places/${citySlug}/${filename}`
+    // Check extension logic. Assuming .jpeg based on previous file lists.
+    return `/images/cities/${cityId}/${placeName}.jpeg`
+}
+
+const handleCityImgError = (e) => {
+    e.target.src = '/images/city_bg.jpg'
 }
 
 const handleImgError = (e) => {
-    // If specific place image fails, show generic placeholder or hide
-    e.target.style.display = 'none' 
-    // Or set to a generic placeholder: e.target.src = '/images/city_bg.jpg'
+    // If specific place image fails, fallback to generic icon or placeholder
+    e.target.style.display = 'none' // Hide image to show icon behind or background
 }
 
 const confirmInvestigate = (place) => {
@@ -243,7 +252,6 @@ const executeInvestigate = async () => {
   investigating.value = true
   const place = selectedPlace.value
   
-  // Fake animation delay for effect (1.5s)
   await new Promise(r => setTimeout(r, 1500))
 
   try {

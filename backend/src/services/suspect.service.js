@@ -1,26 +1,28 @@
-import { getSuspectsByCase } from '../repositories/suspect.repo.js';
-import { getEntityImage } from './image.generator.service.js';
+import { getSuspectsByCase, filterSuspects } from '../repositories/suspect.repo.js';
 
-export async function listSuspectsService(caseId) {
-  const suspects = await getSuspectsByCase(caseId);
+export async function listSuspectsService(caseId, filters = {}) {
+  let suspects;
 
-  if (!suspects || suspects.length === 0) {
-    throw new Error('Nenhum suspeito encontrado para este caso');
+  // If filters are present, use the filtering logic
+  if (Object.keys(filters).length > 0) {
+    suspects = await filterSuspects(caseId, filters);
+  } else {
+    // Otherwise fetch all suspects
+    suspects = await getSuspectsByCase(caseId);
   }
 
-  // Attach images
-  const enrichedSuspects = await Promise.all(suspects.map(async (suspect) => {
-    // Construct a visual description for the image generator
-    // e.g. "Female with Red hair, likes Tennis, drives a Convertible, has a Tattoo"
-    const description = `${suspect.sex} with ${suspect.hair} hair, likes ${suspect.hobby}, drives a ${suspect.vehicle}, has a ${suspect.feature}`;
-    
-    const imageUrl = await getEntityImage('suspect', suspect.id, description);
-    
+  if (!suspects) {
+    suspects = [];
+  }
+
+  // Attach static placeholder image or null
+  // Image generation has been disabled as per request
+  const enrichedSuspects = suspects.map((suspect) => {
     return {
       ...suspect,
-      imageUrl
+      imageUrl: '/images/suspect-placeholder.png' 
     };
-  }));
+  });
 
   return enrichedSuspects;
 }

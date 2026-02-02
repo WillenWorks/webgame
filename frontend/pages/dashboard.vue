@@ -26,24 +26,42 @@
               </div>
               <div class="absolute inset-0 bg-amber-500/10 pointer-events-none" />
             </div>
-            <h2 class="text-2xl font-display text-amber-400">{{ profile.name }}</h2>
+            <h2 class="text-2xl font-display text-amber-400">{{ profile.detective_name || profile.name }}</h2>
             <p class="text-lg font-mono text-cyan-400 uppercase tracking-widest">
-              {{ profile.position || "Agente de Campo" }}
+              {{ profile.rank?.label || "Agente de Campo" }}
             </p>
           </div>
 
           <div class="space-y-4 border-t-2 border-dashed border-slate-700 pt-4">
             <div class="flex justify-between items-center">
               <span class="text-slate-500">REPUTAÇÃO</span>
-              <span class="text-xl text-cyan-400">{{ profile.reputation || 0 }}</span>
+              <span class="text-xl" :class="profile.reputation < 0 ? 'text-red-500' : 'text-cyan-400'">
+                {{ profile.reputation || 0 }}
+              </span>
             </div>
-            <!-- Barra de Reputação -->
-            <div class="w-full bg-slate-900 h-3 border border-slate-700 relative">
-              <div 
-                class="bg-cyan-500 h-full transition-all duration-1000" 
-                :style="{ width: Math.min(100, Math.max(0, (profile.reputation || 0) + 50)) + '%' }"
-              ></div>
+            
+            <!-- Barra de Reputação Bi-direcional -->
+            <div class="w-full h-6 bg-slate-900 border border-slate-700 relative flex items-center justify-center overflow-hidden">
+               <!-- Linha central -->
+               <div class="absolute h-full w-px bg-slate-600 z-10"></div>
+               
+               <!-- Barra -->
+               <div 
+                 class="h-full transition-all duration-1000 absolute"
+                 :class="profile.reputation >= 0 ? 'bg-cyan-500 right-1/2 origin-right' : 'bg-red-500 left-1/2 origin-left'"
+                 :style="{ width: (Math.min(100, Math.abs(profile.reputation || 0)) / 2) + '%' }"
+               ></div>
+
+               <!-- Marcadores de escala (opcional) -->
+               <div class="absolute inset-0 flex justify-between px-2 text-[8px] text-slate-700 font-mono items-center pointer-events-none">
+                 <span>-100</span>
+                 <span>+100</span>
+               </div>
             </div>
+            <p class="text-[10px] text-center font-mono text-slate-500 mt-1">
+               <span v-if="profile.reputation < 0">⚠️ AVISO: REPUTAÇÃO EM RISCO</span>
+               <span v-else>STATUS POSITIVO</span>
+            </p>
             
             <div class="grid grid-cols-2 gap-4 mt-4">
               <div>
@@ -52,7 +70,7 @@
               </div>
               <div class="text-right">
                 <span class="text-slate-500 text-xs block">MISSÕES</span>
-                <p class="text-lg text-white">{{ profile.total_cases || 0 }}</p>
+                <p class="text-lg text-white">{{ profile.total_cases || (profile.cases_solved + profile.cases_failed) || 0 }}</p>
               </div>
             </div>
           </div>
@@ -107,7 +125,7 @@
                   {{ mission.stolen_object ? `RECUPERAR: ${mission.stolen_object}` : "OPERAÇÃO EM ANDAMENTO" }}
                 </h3>
                 <p class="text-sm text-slate-400 font-mono mt-1 max-w-xl">
-                  Status: {{ mission.status }}
+                  Status: <span :class="{'text-green-400': mission.status === 'SOLVED', 'text-red-500': mission.status === 'FAILED'}">{{ mission.status }}</span>
                 </p>
               </div>
               
@@ -120,6 +138,9 @@
                 >
                   RETOMAR
                 </RetroButton>
+                <div v-else class="text-xs font-mono text-slate-500 border border-slate-800 p-2 text-center uppercase">
+                  CASO ENCERRADO
+                </div>
               </div>
             </div>
           </div>
@@ -191,6 +212,7 @@ onMounted(async () => {
   if (token.value) {
     try {
       await fetchProfile()
+      // Sempre recarregar casos para ver status atualizado
       if (profile.value) {
         await fetchAvailableCases()
       }
@@ -200,8 +222,6 @@ onMounted(async () => {
       validating.value = false
     }
   } else {
-    // Se não tiver token, o middleware já deve ter redirecionado, 
-    // mas por segurança mandamos de novo
     router.push('/login')
   }
 })
@@ -237,8 +257,9 @@ const goToArchives = () => {
 
 const goToSuspects = () => {
   // If active case, go to dossier
-  if (cases.value && cases.value.length > 0) {
-    router.push(`/cases/${cases.value[0].id}/dossier`)
+  const active = cases.value.find(c => c.status === 'ACTIVE')
+  if (active) {
+    router.push(`/cases/${active.id}/dossier`)
   } else {
     alert('NENHUM CASO ATIVO PARA CONSULTAR SUSPEITOS.')
   }

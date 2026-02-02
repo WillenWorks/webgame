@@ -32,9 +32,16 @@ export async function getCurrentCityByCase(caseId) {
   const view = viewRows[0];
   const cityId = view?.city_id || step.city_id;
 
-  // 3) Retorna cidade com nomes
+  // 3) Retorna cidade com nomes e coordenadas extraídas
   const [cityRows] = await pool.execute(
-    `SELECT ? AS step_order, c.id AS city_id, c.name AS city_name, c.geo_coordinates as geo_coordinates, co.name AS country_name, c.description_prompt as description_prompt, c.image_url as image_url
+    `SELECT ? AS step_order, 
+            c.id AS city_id, 
+            c.name AS city_name, 
+            ST_Y(c.geo_coordinates) AS lat, 
+            ST_X(c.geo_coordinates) AS lon, 
+            co.name AS country_name, 
+            c.description_prompt as description_prompt, 
+            c.image_url as image_url
      FROM cities c
      JOIN countries co ON co.id = c.country_id
      WHERE c.id = ?

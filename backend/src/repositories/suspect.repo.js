@@ -84,19 +84,33 @@ export async function getCulpritByCase(caseId) {
 
 
 export async function filterSuspects(caseId, filters) {
-  const clauses = ['case_id = ?'];
+  const clauses = ['s.case_id = ?'];
   const params = [caseId];
 
-  if (filters.sex_id) { clauses.push('sex_id = ?'); params.push(filters.sex_id); }
-  if (filters.hair_id) { clauses.push('hair_id = ?'); params.push(filters.hair_id); }
-  if (filters.hobby_id) { clauses.push('hobby_id = ?'); params.push(filters.hobby_id); }
-  if (filters.vehicle_id) { clauses.push('vehicle_id = ?'); params.push(filters.vehicle_id); }
-  if (filters.feature_id) { clauses.push('feature_id = ?'); params.push(filters.feature_id); }
+  if (filters.sex_id) { clauses.push('s.sex_id = ?'); params.push(filters.sex_id); }
+  if (filters.hair_id) { clauses.push('s.hair_id = ?'); params.push(filters.hair_id); }
+  if (filters.hobby_id) { clauses.push('s.hobby_id = ?'); params.push(filters.hobby_id); }
+  if (filters.vehicle_id) { clauses.push('s.vehicle_id = ?'); params.push(filters.vehicle_id); }
+  if (filters.feature_id) { clauses.push('s.feature_id = ?'); params.push(filters.feature_id); }
 
   const where = clauses.join(' AND ');
+  // Updated to include JOINs so we get text descriptions (needed for frontend and image gen)
   const sql = `
-    SELECT id, name, sex_id, hair_id, hobby_id, vehicle_id, feature_id, is_culprit
-    FROM case_suspect_pool
+    SELECT
+      s.id,
+      s.name,
+      sx.name AS sex,
+      h.name AS hair,
+      hb.name AS hobby,
+      v.name AS vehicle,
+      f.name AS feature,
+      s.is_culprit
+    FROM case_suspect_pool s
+    JOIN attr_sex sx ON sx.id = s.sex_id
+    JOIN attr_hair h ON h.id = s.hair_id
+    JOIN attr_hobby hb ON hb.id = s.hobby_id
+    JOIN attr_vehicle v ON v.id = s.vehicle_id
+    JOIN attr_feature f ON f.id = s.feature_id
     WHERE ${where}
   `;
 

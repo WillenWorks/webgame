@@ -7,11 +7,11 @@ const router = Router();
 
 const caseIdParams = z.object({ caseId: zId });
 const filterSchema = z.object({
-  sex_id: z.string().optional(),
-  hair_id: z.string().optional(),
-  hobby_id: z.string().optional(),
-  vehicle_id: z.string().optional(),
-  feature_id: z.string().optional(),
+  sex_id: z.coerce.number().optional(),
+  hair_id: z.coerce.number().optional(),
+  hobby_id: z.coerce.number().optional(),
+  vehicle_id: z.coerce.number().optional(),
+  feature_id: z.coerce.number().optional(),
 });
 
 // GET /cases/:caseId/suspects/filter?hair_id=..&vehicle_id=..

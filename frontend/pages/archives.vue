@@ -38,11 +38,16 @@
       <RetroCard title="HISTÓRICO DE OPERAÇÕES" class="md:col-span-2 h-full">
         <div class="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar p-2">
           
-          <div v-if="history.length === 0" class="text-center text-slate-500 py-12 font-mono">
+          <div v-if="loadingHistory" class="text-center text-cyan-500 py-12 font-mono animate-pulse">
+            BUSCANDO ARQUIVOS CONFIDENCIAIS...
+          </div>
+
+          <div v-else-if="history.length === 0" class="text-center text-slate-500 py-12 font-mono">
             NENHUM REGISTRO DE CASO ANTERIOR ENCONTRADO.
           </div>
 
           <div 
+            v-else
             v-for="(entry, index) in history" 
             :key="index"
             class="border border-slate-800 bg-black/40 p-3 flex justify-between items-center hover:bg-white/5 transition-colors group"
@@ -55,14 +60,17 @@
                 >
                   {{ entry.status === 'SOLVED' ? 'SUCESSO' : 'FALHA' }}
                 </span>
-                <span class="text-xs text-slate-500 font-mono">{{ entry.date }}</span>
+                <span class="text-xs text-slate-500 font-mono">{{ formatDate(entry.created_at) }}</span>
               </div>
-              <h4 class="text-amber-400 font-display text-sm mt-1">
-                {{ entry.summary || 'CASO ARQUIVADO #' + (index + 1000) }}
+              <h4 class="text-amber-400 font-display text-sm mt-1 uppercase">
+                {{ entry.summary || 'CASO ARQUIVADO' }}
               </h4>
+               <span class="text-[10px] text-slate-600 font-mono uppercase">DIFICULDADE: {{ entry.difficulty || 'NORMAL' }}</span>
             </div>
             <div class="text-right">
-              <span class="text-xs text-cyan-400 font-mono block">+{{ entry.xp }} XP</span>
+              <span class="text-xs text-cyan-400 font-mono block">
+                {{ entry.xp_awarded > 0 ? '+' : ''}}{{ entry.xp_awarded }} XP
+              </span>
             </div>
           </div>
 
@@ -77,43 +85,39 @@
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
 import { useGame } from '~/composables/useGame'
+import { useApi } from '~/composables/useApi'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const { profile, fetchProfile } = useGame()
+const api = useApi()
 
-// Mock history for now since endpoint is not standardized
-const history = ref([
-  // { status: 'SOLVED', date: '1985-10-24', summary: 'Roubo do diamante Hope', xp: 500 },
-  // { status: 'FAILED', date: '1985-11-02', summary: 'Furto da Torre Eiffel', xp: 0 },
-])
+const history = ref([])
+const loadingHistory = ref(false)
 
 onMounted(async () => {
   if (!profile.value) {
     await fetchProfile()
   }
-  // If we had an endpoint:
-  // history.value = await api('/cases/history')
-  
-  // Populate mock data based on stats if empty
-  if (history.value.length === 0 && profile.value) {
-     for(let i=0; i<profile.value.solved_cases; i++) {
-        history.value.push({ 
-           status: 'SOLVED', 
-           date: 'ARQUIVADO', 
-           summary: `CASO DE SUCESSO #${2000+i}`, 
-           xp: 500 
-        })
-     }
-     for(let i=0; i<profile.value.failed_cases; i++) {
-        history.value.push({ 
-           status: 'FAILED', 
-           date: 'ARQUIVADO', 
-           summary: `CASO ENCERRADO #${9000+i}`, 
-           xp: 0 
-        })
-     }
-  }
+  await fetchHistory()
 })
+
+const fetchHistory = async () => {
+  if (!profile.value) return
+  loadingHistory.value = true
+  try {
+    // Usamos o profile summary que agora retorna recentPerformance real do banco
+    const res = await api(`/profiles/${profile.value.id}/summary`)
+    if (res && res.summary && res.summary.recentPerformance) {
+       history.value = res.summary.recentPerformance
+    }
+  } catch (e) {
+    console.error('Erro ao buscar histórico', e)
+  } finally {
+    loadingHistory.value = false
+  }
+}
 
 const goToDashboard = () => {
   router.push('/')
@@ -126,6 +130,16 @@ const calculateXpProgress = () => {
   const current = profile.value.xp - min_xp
   const total = max_xp - min_xp
   return Math.min(100, Math.max(0, (current / total) * 100))
+}
+
+const formatDate = (iso) => {
+  if (!iso) return 'DATA DESCONHECIDA'
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString('pt-BR')
+  } catch {
+    return iso
+  }
 }
 </script>
 

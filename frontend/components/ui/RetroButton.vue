@@ -8,7 +8,6 @@
       extraClass
     ]"
     :disabled="disabled"
-    @click="$emit('click')"
   >
     <slot />
   </button>
@@ -24,5 +23,5 @@ defineProps({
   disabled: Boolean,
   extraClass: String
 })
-defineEmits(['click'])
+// removed defineEmits to allow fallthrough
 </script>

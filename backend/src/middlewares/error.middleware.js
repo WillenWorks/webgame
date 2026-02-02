@@ -6,8 +6,14 @@ export function errorMiddleware(err, req, res, next) {
 
   // Zod-like issues
   const zodIssues = err?.issues || err?.error?.issues || null;
-  const code = err?.code || (zodIssues ? 'VALIDATION_ERROR' : 'BAD_REQUEST');
-  const status = code === 'VALIDATION_ERROR' ? 400 : 400;
+  const code = err?.code || (zodIssues ? 'VALIDATION_ERROR' : 'INTERNAL_SERVER_ERROR');
+  
+  // Decide status code
+  let status = 500;
+  if (code === 'VALIDATION_ERROR' || code === 'BAD_REQUEST') status = 400;
+  else if (code === 'UNAUTHORIZED') status = 401;
+  else if (code === 'FORBIDDEN') status = 403;
+  else if (code === 'NOT_FOUND') status = 404;
 
   // Log estruturado (pode ser integrado com um logger real)
   console.error(JSON.stringify({
@@ -18,6 +24,7 @@ export function errorMiddleware(err, req, res, next) {
     code,
     message: err?.message || 'Erro interno',
     details: zodIssues || undefined,
+    stack: err?.stack // Log stack for debugging
   }));
 
   return res.status(status).json({

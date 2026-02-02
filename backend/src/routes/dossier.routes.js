@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { validate } from '../middlewares/validate.middleware.js';
 import { z } from 'zod';
 import { setDossierNotesService, getDossierNotesService, clearDossierFieldService, clearDossierNotesService } from '../services/dossier.service.js';
+import { authMiddleware } from '../middlewares/auth.middleware.js';
+import { requireProfileMiddleware } from '../middlewares/require_profile.middleware.js';
 
 const router = Router();
+router.use(authMiddleware);
+router.use(requireProfileMiddleware);
 
 // GET notas salvas
 router.get('/:caseId/dossier', async (req, res, next) => {
@@ -15,11 +19,11 @@ router.get('/:caseId/dossier', async (req, res, next) => {
 
 // PUT notas (inserir/atualizar características anotadas)
 const notesSchema = z.object({
-  sex_id: z.string().optional(),
-  hair_id: z.string().optional(),
-  hobby_id: z.string().optional(),
-  vehicle_id: z.string().optional(),
-  feature_id: z.string().optional(),
+  sex_id: z.coerce.number().optional(),
+  hair_id: z.coerce.number().optional(),
+  hobby_id: z.coerce.number().optional(),
+  vehicle_id: z.coerce.number().optional(),
+  feature_id: z.coerce.number().optional(),
 });
 router.put('/:caseId/dossier', validate(notesSchema), async (req, res, next) => {
   try {

@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { initDossierNotesTable, getDossierNotes, upsertDossierNotes, clearDossierField, clearDossierNotes } from '../repositories/dossier.repo.js';
 
 const notesSchema = z.object({
-  sex_id: z.string().optional(),
-  hair_id: z.string().optional(),
-  hobby_id: z.string().optional(),
-  vehicle_id: z.string().optional(),
-  feature_id: z.string().optional(),
+  sex_id: z.coerce.number().optional(),
+  hair_id: z.coerce.number().optional(),
+  hobby_id: z.coerce.number().optional(),
+  vehicle_id: z.coerce.number().optional(),
+  feature_id: z.coerce.number().optional(),
 });
 
 export async function setDossierNotesService(caseId, profileId, body) {

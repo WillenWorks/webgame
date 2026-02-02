@@ -364,6 +364,32 @@ export function useGame() {
   };
 
   /* =========================
+   *  DOSSIER & NOTES
+   * ========================= */
+  const getDossierNotes = async (caseId: string) => {
+    try {
+      const res = await api<{ ok: boolean; notes: any }>(`/cases/${caseId}/dossier`);
+      return res.notes || {};
+    } catch (e) {
+      console.error("[GAME] Erro ao carregar notas do dossiê", e);
+      return {};
+    }
+  };
+
+  const saveDossierNotes = async (caseId: string, notes: any) => {
+    try {
+      const res = await api<{ ok: boolean; notes: any }>(`/cases/${caseId}/dossier`, {
+        method: "PUT",
+        body: notes,
+      });
+      return res.notes || {};
+    } catch (e) {
+      console.error("[GAME] Erro ao salvar notas do dossiê", e);
+      return null;
+    }
+  };
+
+  /* =========================
    *  WARRANT & SUSPECTS
    * ========================= */
   const filterSuspects = async (caseId: string, criteria: Partial<Suspect>) => {
@@ -464,6 +490,8 @@ export function useGame() {
     filterSuspects,
     fetchRoutes,
     issueWarrant,
+    getDossierNotes,
+    saveDossierNotes,
     createProfile: async (name: string) => {
         const api = useApi();
         return await api("/profiles", { method: "POST", body: { detective_name: name } });
