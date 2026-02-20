@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { useApi } from "@/composables/useApi";
 // useCookie is auto-imported in Nuxt 3
 
@@ -37,20 +37,6 @@ type TravelOption = {
   cost: number;
 };
 
-type VisitCurrentCityResponse = {
-  city: {
-    city_id: string;
-    city_name: string;
-    country_name: string;
-    geo_coordinates: { x: number; y: number };
-    step_order: number;
-    imageUrl?: string;
-  };
-  travelOptions?: TravelOption[];
-  timeState?: TimeState;
-  gameOver?: boolean;
-};
-
 type GenericGameResponse = {
   ok: boolean;
   message?: string;
@@ -71,11 +57,25 @@ type Suspect = {
   imageUrl?: string;
 };
 
+type VisitCurrentCityResponse = {
+  city: {
+    city_id: string;
+    city_name: string;
+    country_name: string;
+    geo_coordinates: { x: number; y: number };
+    step_order: number;
+    imageUrl?: string;
+  };
+  travelOptions?: TravelOption[];
+  timeState?: TimeState;
+  places: any[];
+  cluesRevealed: number;
+};
+
 type City = {
-  id: string | number;
+  id: string;
   name: string;
   country: string;
-  countryCode: string | null;
   geo: { lat: number; lon: number };
   map: { x: number | null; y: number | null };
   hasRoutes: boolean;
@@ -91,45 +91,11 @@ type RoutesResponse = {
   }>;
 };
 
-type ProfileListResponse = {
-  profiles: Array<{
-    id: string;
-    detective_name: string;
-  }>;
-};
-
-type ProfileSummaryResponse = {
-  summary: {
-    profile: {
-      id: string;
-      detective_name: string;
-      xp: number | string;
-      rank_id: number | string;
-      reputation_score: number | string;
-      cases_solved: number | string;
-      cases_failed: number | string;
-    };
-    aggregates?: {
-      cases_total: number | string;
-    };
-  };
-};
-
 /* =========================
- *  RANKS (MAPA LOCAL)
- * ========================= */
-const RANKS: Record<number, RankInfo> = {
-  1: { label: "RECRUTA", min_xp: 0, max_xp: 999 },
-  2: { label: "AGENTE DE CAMPO", min_xp: 1000, max_xp: 4999 },
-  3: { label: "AGENTE SÊNIOR", min_xp: 5000, max_xp: 19999 },
-  4: { label: "ELITE", min_xp: 20000, max_xp: 39999 },
-  5: { label: "LENDÁRIO", min_xp: 40000, max_xp: null },
-};
-
-/* =========================
- *  STATE
+ *  STATE (Global)
  * ========================= */
 const profile = ref<Profile | null>(null);
+const activeCase = ref<any>(null); // NEW: Explicit activeCase ref
 const cases = ref<any[]>([]);
 const timeState = ref<TimeState | null>(null);
 const isLoading = ref(false);
@@ -139,7 +105,7 @@ const availableRoutes = ref<any[]>([]);
 const lastGameOver = ref<string | null>(null); // "WIN" or "LOSE"
 
 export function useGame() {
-  const api = useApi();
+  const fetchApi = useApi(); // CORRECTED: useApi returns the fetch function directly
 
   /* =========================
    *  HELPER: SYNC TIME
@@ -149,192 +115,103 @@ export function useGame() {
       timeState.value = data.timeState;
     }
     if (data?.gameOver) {
-       // Check if it's a win or loss if provided, otherwise generic
-       lastGameOver.value = data.win ? "WIN" : "LOSE";
+      lastGameOver.value = data.win ? "WIN" : "LOSE";
     }
   };
 
   /* =========================
-   *  HELPER: PARSE CLUE JSON
+   *  ACTIONS
    * ========================= */
-  // Extracts clean text and syncs hidden state from JSON-encoded clues
-  const processClueResponse = (response: GenericGameResponse) => {
-    let cleanText = response.text || "";
-    let extractedTimeState = null;
 
-    // Check if text looks like JSON
-    if (typeof cleanText === 'string' && cleanText.trim().startsWith('{')) {
-      try {
-        const parsed = JSON.parse(cleanText);
-        
-        // Extract Text
-        if (parsed.TEXT || parsed.text) {
-          cleanText = parsed.TEXT || parsed.text;
-        }
-
-        // Extract TimeState if embedded
-        if (parsed.TIMESTATE || parsed.timeState) {
-          extractedTimeState = parsed.TIMESTATE || parsed.timeState;
-        }
-      } catch (e) {
-        console.warn("[GAME] Failed to parse JSON clue text", e);
-      }
-    }
-
-    // Sync TimeState (Prioritize top-level, then extracted)
-    if (response.timeState) {
-      syncGameState(response);
-    } else if (extractedTimeState) {
-      syncGameState({ ...response, timeState: extractedTimeState });
-    } else {
-        syncGameState(response); // Standard sync
-    }
-
-    return {
-      ...response,
-      text: cleanText // Return clean text for display
-    };
-  };
-
-  /* =========================
-   *  PROFILE
-   * ========================= */
- const fetchProfile = async () => {
+  // 1. Fetch User Profile
+  const fetchProfile = async () => {
     isLoading.value = true;
     try {
-      const list = await api<ProfileListResponse>("/profiles");
-
-      if (!list?.profiles?.length) {
-        profile.value = null;
-        return;
+      const data = await fetchApi("/profiles/me");
+      if (data) {
+        profile.value = data;
       }
-
-      const profileData = list.profiles[0];
-      if (!profileData) {
-        profile.value = null;
-        return;
-      }
-
-      const profileId = profileData.id;
-      const summaryRes = await api<ProfileSummaryResponse>(
-        `/profiles/${profileId}/summary`,
-      );
-
-      if (!summaryRes?.summary?.profile) {
-        profile.value = null;
-        return;
-      }
-
-      const s = summaryRes.summary;
-      const rankId: number = Number(s.profile.rank_id);
-      const rank: RankInfo = RANKS[rankId] ?? RANKS[1]!;
-
-      profile.value = {
-        id: s.profile.id,
-        detective_name: s.profile.detective_name,
-        xp: Number(s.profile.xp) || 0,
-        reputation: Number(s.profile.reputation_score) || 0,
-        rank,
-        total_cases: Number(s.aggregates?.cases_total) || 0,
-        solved_cases: Number(s.profile.cases_solved) || 0,
-        failed_cases: Number(s.profile.cases_failed) || 0,
-      };
     } catch (e) {
-      console.error("[GAME] Erro ao carregar perfil", e);
-      profile.value = null;
+      console.error("[GAME] Erro ao buscar perfil", e);
     } finally {
       isLoading.value = false;
     }
   };
 
-  /* =========================
-   *  ACTIVE CASE
-   * ========================= */
+  // 2. Fetch Active Case (if any)
   const fetchActiveCase = async () => {
-    // @ts-ignore
-    const token = useCookie("auth_token");
-    if (!token.value) return;
-
     isLoading.value = true;
     try {
-      const res = await api<any>("/cases/active");
-      if (res?.case) {
-        cases.value = [res.case];
+      const data = await fetchApi("/cases/active");
+
+      if (data && data?.case?.id) {
+        activeCase.value = data;
+        if (data.currentTime || data.current_time) {
+          timeState.value = {
+            current_time: data.currentTime || data.current_time,
+            deadline_time: data.deadlineTime || data.deadline_time,
+            hours_per_day: 16,
+            days_remaining: 7,
+          };
+        }
+        return data;
       } else {
-        cases.value = [];
+        activeCase.value = null;
       }
-    } catch (e: any) {
-      if (e?.response?.status === 404) cases.value = [];
+    } catch (e) {
+      console.error("[GAME] Erro ao buscar caso ativo", e);
+      activeCase.value = null;
     } finally {
       isLoading.value = false;
     }
   };
 
-  const startCase = async (difficulty: "EASY" | "HARD" | "EXTREME") => {
+  // 3. Start New Case
+  const startCase = async (difficulty: string) => {
     isProcessingCase.value = true;
     try {
-      const res = await api<any>("/cases", {
+      const data = await fetchApi("/cases", {
         method: "POST",
-        body: { difficulty },
+        body: JSON.stringify({ difficulty }),
       });
-      return res?.case || null;
-    } catch (e) {
-      console.error("[GAME] Error starting case", e);
-      return null;
-    } finally {
-      isProcessingCase.value = false;
-    }
-  };
-
-  /* =========================
-   *  GAMEPLAY ACTIONS
-   * ========================= */
-  const visitCurrentCity = async (caseId: string) => {
-    isProcessingCase.value = true;
-    try {
-      const res = await api<VisitCurrentCityResponse>(`/cases/${caseId}/visit-current`);
-      
-      syncGameState(res);
-
-      console.log("[GAME] Visited city data:", res);
-
-      if (res?.city) {
-        currentCity.value = {
-          id: res.city.city_id,
-          name: res.city.city_name,
-          country: res.city.country_name,
-          lat: res.city.geo_coordinates?.y,
-          lon: res.city.geo_coordinates?.x,
-          step: res.city.step_order,
-          imageUrl: res.city.image_url,
-          description: res.city.description_prompt,
-        };
+      if (data && data?.case?.id) {
+        activeCase.value = data;
+        await fetchActiveCase();
+        return data;
       }
-
-      if (res?.travelOptions) {
-        availableRoutes.value = res.travelOptions.map((opt: any) => ({
-          id: opt.city_id,
-          name: opt.city_name,
-          country: opt.country_name,
-          travelTime: opt.travel_time_hours,
-          geo: { lat: 0, lon: 0 }, 
-          hasRoutes: true,
-        }));
-      }
-
-      return res;
     } catch (e) {
-      console.error("[GAME] Error visiting city", e);
+      console.error("[GAME] Erro ao iniciar caso", e);
       throw e;
     } finally {
       isProcessingCase.value = false;
     }
   };
 
+  // 4. Visit Current City (Get Hub)
+  const visitCurrentCity = async (caseId: string) => {
+    isLoading.value = true;
+    try {
+      const data = await fetchApi(`/cases/${caseId}/visit-current`);
+      console.log(`visitCurrentCity for caseId: ${caseId}`);
+      console.log("visitCurrentCity data:", data);
+      if (data) {
+        currentCity.value = data.city;
+        syncGameState(data);
+        return data;
+      }
+    } catch (e) {
+      console.error("[GAME] Erro ao visitar cidade", e);
+      throw e;
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  // 5. Travel to New City
   const travelToCity = async (caseId: string, cityId: string | number) => {
     isProcessingCase.value = true;
     try {
-      const res = await api<GenericGameResponse>(`/cases/${caseId}/travel`, {
+      const res = await fetchApi<GenericGameResponse>(`/cases/${caseId}/travel`, {
         method: "POST",
         body: { cityId: Number(cityId) },
       });
@@ -347,67 +224,47 @@ export function useGame() {
     }
   };
 
+  // 6. Investigate Place
   const investigatePlace = async (caseId: string, placeId: string) => {
     try {
-      const res = await api<GenericGameResponse>(`/cases/${caseId}/investigate`, {
-        method: "POST",
-        body: { placeId },
-      });
-      
-      // PROCESS RESPONSE HERE to handle JSON text and hidden timeState
-      const processedRes = processClueResponse(res);
-      
-      return processedRes;
+      const data = await fetchApi<GenericGameResponse>(
+        `/cases/${caseId}/investigate`,
+        {
+          method: "POST",
+          body: { placeId },
+        },
+      );
+      syncGameState(data);
+      return data;
     } catch (e) {
+      console.error("[GAME] Erro ao investigar", e);
       throw e;
     }
   };
 
-  /* =========================
-   *  DOSSIER & NOTES
-   * ========================= */
-  const getDossierNotes = async (caseId: string) => {
-    try {
-      const res = await api<{ ok: boolean; notes: any }>(`/cases/${caseId}/dossier`);
-      return res.notes || {};
-    } catch (e) {
-      console.error("[GAME] Erro ao carregar notas do dossiê", e);
-      return {};
-    }
-  };
-
-  const saveDossierNotes = async (caseId: string, notes: any) => {
-    try {
-      const res = await api<{ ok: boolean; notes: any }>(`/cases/${caseId}/dossier`, {
-        method: "PUT",
-        body: notes,
-      });
-      return res.notes || {};
-    } catch (e) {
-      console.error("[GAME] Erro ao salvar notas do dossiê", e);
-      return null;
-    }
-  };
-
-  /* =========================
-   *  WARRANT & SUSPECTS
-   * ========================= */
+  // 7. Filter Suspects (Dossier)
   const filterSuspects = async (caseId: string, criteria: Partial<Suspect>) => {
     const params = new URLSearchParams();
     Object.entries(criteria).forEach(([k, v]) => {
       if (v) params.append(k, String(v));
     });
-    
-    const res = await api<{ok: boolean, suspects: Suspect[]}>(`/cases/${caseId}/suspects?${params.toString()}`);
-    return res.suspects || []; 
+
+    const res = await fetchApi<{ ok: boolean; suspects: Suspect[] }>(
+      `/cases/${caseId}/suspects?${params.toString()}`,
+    );
+    return res.suspects || [];
   };
 
+  // 8. Issue Warrant
   const issueWarrant = async (caseId: string, suspectId: number) => {
     try {
-      const res = await api<GenericGameResponse>(`/cases/${caseId}/warrant`, {
-        method: "POST",
-        body: { suspectId },
-      });
+      const res = await fetchApi<GenericGameResponse>(
+        `/cases/${caseId}/warrant`,
+        {
+          method: "POST",
+          body: { suspectId },
+        },
+      );
       syncGameState(res);
       return res;
     } catch (e) {
@@ -415,16 +272,45 @@ export function useGame() {
     }
   };
 
+  // 9. Get Dossier Notes
+  const getDossierNotes = async (caseId: string) => {
+    try {
+      return await fetchApi(`/cases/${caseId}/dossier/`);
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  };
+
+  // 10. Save Dossier Notes
+  const saveDossierNotes = async (caseId: string, notes: any) => {
+    try {
+      const res = await fetchApi<{ ok: boolean; notes: any }>(
+        `/cases/${caseId}/dossier`,
+        {
+          method: "PUT",
+          body: notes,
+        },
+      );
+      return res.notes || {};
+    } catch (e) {
+      console.error("[GAME] Erro ao salvar notas do dossiê", e);
+      return null;
+    }
+  };
+
+  // 11. Fetch Available Routes (for Map)
   const fetchRoutes = async (caseId: string, stepOrder: number) => {
     try {
-      const res = await api<RoutesResponse>(`/routes/${caseId}`);
+      const res = await fetchApi<RoutesResponse>(`/routes/${caseId}`);
 
       if (!res?.route || !res.route[stepOrder - 1]) {
-         availableRoutes.value = [];
-         return [];
+        availableRoutes.value = [];
+        return [];
       }
 
-      const options: number[] = res.route[stepOrder - 1]?.clues_generated_json?.options ?? [];
+      const options: number[] =
+        res.route[stepOrder - 1]?.clues_generated_json?.options ?? [];
       console.log("[GAME] Rotas disponíveis (IDs):", options);
 
       if (!options.length) {
@@ -435,7 +321,7 @@ export function useGame() {
       const cities = await Promise.all(
         options.map(async (cityId) => {
           try {
-            const cityRes = await api<{ ok: boolean; city: any }>(
+            const cityRes = await fetchApi<{ ok: boolean; city: any }>(
               `/city/${cityId}`,
             );
 
@@ -449,7 +335,9 @@ export function useGame() {
               countryCode: null,
               geo: {
                 lat: Number(c.lat ?? c.latitude ?? c.geo_coordinates?.y ?? 0),
-                lon: Number(c.lng ?? c.lon ?? c.longitude ?? c.geo_coordinates?.x ?? 0),
+                lon: Number(
+                  c.lng ?? c.lon ?? c.longitude ?? c.geo_coordinates?.x ?? 0,
+                ),
               },
               map: { x: null, y: null },
               hasRoutes: true,
@@ -457,7 +345,10 @@ export function useGame() {
               imageUrl: c.imageUrl,
             } as City;
           } catch (err) {
-            console.error(`[GAME] Falha ao carregar detalhes da cidade ${cityId}`, err);
+            console.error(
+              `[GAME] Falha ao carregar detalhes da cidade ${cityId}`,
+              err,
+            );
             return null;
           }
         }),
@@ -470,9 +361,13 @@ export function useGame() {
       return [];
     }
   };
+  const refreshTimeState = (newState: TimeState) => {
+    if (newState) timeState.value = newState;
+  };
 
   return {
     profile,
+    activeCase,
     cases,
     timeState,
     isLoading,
@@ -492,9 +387,12 @@ export function useGame() {
     issueWarrant,
     getDossierNotes,
     saveDossierNotes,
+    refreshTimeState,
     createProfile: async (name: string) => {
-        const api = useApi();
-        return await api("/profiles", { method: "POST", body: { detective_name: name } });
+      return await fetchApi("/profiles", {
+        method: "POST",
+        body: { detective_name: name },
+      });
     },
     fetchAvailableCases: fetchActiveCase,
   };

@@ -1,7 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { getCurrentCityByCase, getCityPlaceById } from "../repositories/visit.repo.js";
 import { getNextCityByCase, getStepOptions } from "../repositories/route.repo.js";
-import { getExistingClueByCityPlace, insertClue } from "../repositories/clue.repo.js";
+import { getExistingClueByCityPlace, insertClue, getCluesByCaseAndCity } from "../repositories/clue.repo.js";
 import { getCulpritByCase } from "../repositories/suspect.repo.js";
 import { getCaseById, setCapturePlace } from "../repositories/warrant.repo.js";
 import { insertCapturedVillainLog } from "../repositories/captured.repo.js";
@@ -9,6 +9,7 @@ import { getCurrentView } from "../repositories/current_view.repo.js";
 import { generateClue } from "./clue.generator.service.js"; 
 import { consumeActionTime, getCaseTimeSummary } from "./time.service.js"; 
 import { finishCaseService } from "./finish_case.service.js";
+import { pickNextVillainClue } from "./clue.manager.service.js"; // NEW
 
 export async function investigateService(caseId, cityPlaceId) {
   if (!cityPlaceId) throw new Error("cityPlaceId não informado");
@@ -19,17 +20,15 @@ export async function investigateService(caseId, cityPlaceId) {
   const place = await getCityPlaceById(caseId, cityPlaceId);
   if (!place || place.city_id !== city.city_id) throw new Error("Local inválido para a cidade atual");
 
-  // 1️⃣ Consumir tempo de investigação (60 min)
+  // 1️⃣ Tempo (60 min)
   const timeResult = await consumeActionTime({ 
     caseId, 
     minutes: 60, 
     timezone: "America/Sao_Paulo" 
   });
   
-  // Obter timeState atualizado
   const timeState = await getCaseTimeSummary({ caseId });
 
-  // Verificar se o tempo acabou
   if (timeResult.failed) {
     return await finishCaseService({
       caseId,
@@ -40,13 +39,12 @@ export async function investigateService(caseId, cityPlaceId) {
     });
   }
 
-  // 2️⃣ Verificar se é Local de Captura (Fase Final)
+  // 2️⃣ Captura
   if (place.is_capture_location) {
     const gameCase = await getCaseById(caseId);
     const culprit = await getCulpritByCase(caseId);
 
     if (!gameCase.warrant_suspect_id) {
-      // Falha se tentar capturar sem mandado
       return await finishCaseService({
         caseId,
         status: "FAILED",
@@ -61,7 +59,6 @@ export async function investigateService(caseId, cityPlaceId) {
       ? "Você cercou o vilão e efetuou a prisão sem incidentes! Bom trabalho, Detetive."
       : "Você prendeu a pessoa errada... O verdadeiro criminoso escapou!";
       
-    // Registrar log de captura
     await insertCapturedVillainLog({
       id: uuid(),
       profileId: gameCase.profile_id,
@@ -88,7 +85,7 @@ export async function investigateService(caseId, cityPlaceId) {
     });
   }
 
-  // 3️⃣ Verificar Cache de Pista (se já visitou, retorna a mesma fala)
+  // 3️⃣ Cache de Pista
   const existing = await getExistingClueByCityPlace(caseId, cityPlaceId);
   if (existing) {
     return {
@@ -98,11 +95,11 @@ export async function investigateService(caseId, cityPlaceId) {
     };
   }
 
-  // 4️⃣ Preparar dados para Geração de Pista
+  // 4️⃣ JIT Generation com DB Control
   const optionsMeta = await getStepOptions(caseId, city.step_order);
   const view = await getCurrentView(caseId, city.step_order);
   
-  // Lógica de Decoy
+  // Decoy Logic
   const isDecoy = Boolean(
     view && optionsMeta && Array.isArray(optionsMeta.options) &&
     optionsMeta.options.includes(view.city_id) &&
@@ -112,8 +109,8 @@ export async function investigateService(caseId, cityPlaceId) {
   let clueType = place.clue_type;
   let targetType = "NONE";
   let targetValue = null;
-  var resolvedAttrValue = null;
-  var targetRefId = null;
+  let resolvedAttrValue = null;
+  let targetRefId = null;
   
   // Determinar alvo da pista
   if (isDecoy) {
@@ -122,45 +119,73 @@ export async function investigateService(caseId, cityPlaceId) {
     if (clueType === "NEXT_LOCATION") {
       const nextCity = await getNextCityByCase(caseId, city.step_order);
       if (!nextCity) {
-        clueType = "WARNING"; 
+        clueType = "WARNING"; // Fallback if no next city (should happen only if DB is corrupted or final step logic mismatch)
       } else {
         targetType = "CITY";
-        targetValue = nextCity.city_name; 
+        targetValue = `${nextCity.city_name}, ${nextCity.country_name}`; 
+        
+        // Topic Rotation Logic (Simple)
+        const TOPICS = ['História', 'Geografia', 'Economia', 'Culinária', 'Arte', 'Religião', 'Costumes', 'Bandeira'];
+        // Get existing clues in this city to see what topic was used?
+        // Actually, we can just random pick. Collisions in *topics* are fine, just not identical text.
+        // But let's try to pass a specific topicCategory to the prompt builder.
+        const topicCategory = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+        // Pass this down via context
+        // Note: investigateService doesn't pass 'context' fully custom yet, we need to adapt `generateClue` call below.
       }
     } else if (clueType === "VILLAIN") {
-      const culprit = await getCulpritByCase(caseId);
-      const attrs = [
-        { key: "vehicle", label: culprit.vehicle, ref: culprit.vehicle_id },
-        { key: "hobby", label: culprit.hobby, ref: culprit.hobby_id },
-        { key: "hair", label: culprit.hair, ref: culprit.hair_id },
-        { key: "feature", label: culprit.feature, ref: culprit.feature_id },
-      ];
-      const chosen = attrs[Math.floor(Math.random() * attrs.length)];
-      clueType = "VILLAIN_ATTRIBUTE";
-      targetType = "VILLAIN_ATTR";
-      targetValue = chosen.key; 
-      resolvedAttrValue = chosen.label;
-      targetRefId = chosen.ref;
+       // NEW: Pick from DB Pool
+       const pickedClue = await pickNextVillainClue(caseId);
+       
+       if (pickedClue) {
+           clueType = "VILLAIN_ATTRIBUTE";
+           targetType = "VILLAIN_ATTR";
+           targetValue = pickedClue.attribute_type; // "hair"
+           resolvedAttrValue = pickedClue.attribute_value; // "Loiro"
+           targetRefId = pickedClue.target_ref_id;
+       } else {
+           // No more clues available?
+           clueType = "WARNING"; // Or generic "I don't know anything else"
+           // Or fallback to repeating one?
+       }
     }
   }
-
-  // Determinar Reputação e Dificuldade
+  
+  // Get Difficulty & Reputation (Kept from v12)
   const [[prof]] = await (await import('../config/database.js')).default.execute(
     'SELECT gd.code AS difficulty_code, p.id as profile_id FROM active_cases ac JOIN game_difficulty gd ON gd.id = ac.difficulty_id JOIN profiles p ON p.id = ac.profile_id WHERE ac.id = ?',
     [caseId]
   );
   const difficulty = prof?.difficulty_code || 'EASY';
   const profileId = prof?.profile_id;
-  
-  // Buscar reputação real
   const [[pRow]] = await (await import('../config/database.js')).default.execute('SELECT reputation_score FROM profiles WHERE id = ?', [profileId]);
-  const score = pRow?.reputation_score || 0;
-  
   let reputation = "NEUTRA";
-  if (score > 1000) reputation = "ALTA";
-  if (score < 0) reputation = "BAIXA"; 
-
-  // Gerar Pista (Texto)
+  if (pRow?.reputation_score > 1000) reputation = "ALTA";
+  if (pRow?.reputation_score < 0) reputation = "BAIXA";
+  
+  // Villain Sex
+  let villainSex = 'Indefinido';
+  if (clueType === 'VILLAIN' || clueType === 'VILLAIN_ATTRIBUTE') {
+      const c = await getCulpritByCase(caseId);
+      if (c) villainSex = c.sex;
+  }
+  
+  // Call Generator
+  const context = {
+      city: city.city_name,
+      difficulty: difficulty === 'HARD' ? 1.2 : 1.0,
+      mode: isDecoy ? 'decoy' : (optionsMeta ? 'primary' : 'final'),
+      phase: city.step_order,
+      villainSex
+  };
+  
+  // If Next Location, pick topic
+  if (targetType === "CITY") {
+      const TOPICS = ['História', 'Geografia', 'Economia', 'Culinária', 'Arte', 'Religião', 'Costumes', 'Bandeira'];
+      const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+      context.topicCategory = topic;
+  }
+  
   const clueResult = await generateClue({
     archetype: place.interaction_style,
     reputation,
@@ -168,20 +193,15 @@ export async function investigateService(caseId, cityPlaceId) {
       clue_type: clueType,
       target_type: targetType,
       target_value: targetValue,
-      resolved_value: resolvedAttrValue || null 
+      resolved_value: resolvedAttrValue // Passed!
     },
-    context: {
-      city: city.city_name,
-      difficulty: difficulty === 'HARD' ? 1.2 : (difficulty === 'EXTREME' ? 1.5 : 1.0),
-      mode: isDecoy ? 'decoy' : (optionsMeta ? 'primary' : 'final'),
-      phase: city.step_order
-    }
+    context
   });
 
   const generatedText = clueResult.text;
   
   // Salvar Pista
-  const revealed = (!isDecoy && (place.clue_type === "NEXT_LOCATION" || place.clue_type === "VILLAIN")) ? 1 : 0;
+  const revealed = (!isDecoy && (clueType === "NEXT_LOCATION" || clueType === "VILLAIN_ATTRIBUTE")) ? 1 : 0;
   
   await insertClue({
     id: uuid(),

@@ -7,7 +7,7 @@ export async function initTravelLogTable() {
   const sql = `
     CREATE TABLE IF NOT EXISTS case_travel_log (
       id CHAR(36) NOT NULL,
-      case_id CHAR(36) NOT NULL,
+      active_case_id CHAR(36) NOT NULL,
       from_city_id INT NOT NULL,
       to_city_id INT NOT NULL,
       step_order INT NOT NULL,
@@ -15,7 +15,7 @@ export async function initTravelLogTable() {
       reason VARCHAR(255) NULL,
       created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
-      KEY case_id_idx (case_id)
+      KEY active_case_id_idx (active_case_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `;
   await pool.execute(sql);
@@ -24,7 +24,7 @@ export async function initTravelLogTable() {
 export async function insertTravelLog({ id, caseId, fromCityId, toCityId, stepOrder, success, reason }) {
   const sql = `
     INSERT INTO case_travel_log
-      (id, case_id, from_city_id, to_city_id, step_order, success, reason)
+      (id, active_case_id, from_city_id, to_city_id, step_order, success, reason)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
   await pool.execute(sql, [id, caseId, fromCityId, toCityId, stepOrder, success ? 1 : 0, reason || null]);
@@ -32,9 +32,9 @@ export async function insertTravelLog({ id, caseId, fromCityId, toCityId, stepOr
 
 export async function getTravelLogs(caseId) {
   const sql = `
-    SELECT id, case_id, from_city_id, to_city_id, step_order, success, reason, created_at
+    SELECT id, active_case_id, from_city_id, to_city_id, step_order, success, reason, created_at
     FROM case_travel_log
-    WHERE case_id = ?
+    WHERE active_case_id = ?
     ORDER BY created_at DESC
   `;
   const [rows] = await pool.execute(sql, [caseId]);
@@ -43,9 +43,9 @@ export async function getTravelLogs(caseId) {
 
 export async function getLastTravelLogForStep(caseId, stepOrder) {
   const sql = `
-    SELECT id, case_id, from_city_id, to_city_id, step_order, success, reason, created_at
+    SELECT id, active_case_id, from_city_id, to_city_id, step_order, success, reason, created_at
     FROM case_travel_log
-    WHERE case_id = ? AND step_order = ?
+    WHERE active_case_id = ? AND step_order = ?
     ORDER BY created_at DESC
     LIMIT 1
   `;

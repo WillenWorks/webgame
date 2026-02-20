@@ -11,16 +11,21 @@
           INTERROGANDO TESTEMUNHA...
         </p>
       </div>
-      <RetroButton variant="outline" @click="leavePlace" class="text-xs">
-        SAIR DO LOCAL
-      </RetroButton>
+      <div class="flex gap-2">
+        <RetroButton v-if="isGameOver" variant="danger" @click="goToDebriefing" class="text-xs animate-pulse">
+          VER RELATÓRIO FINAL
+        </RetroButton>
+        <RetroButton v-else variant="outline" @click="leavePlace" class="text-xs">
+          SAIR DO LOCAL
+        </RetroButton>
+      </div>
     </div>
 
     <!-- Main Content: NPC Interaction -->
     <div class="flex-1 relative flex items-center justify-center overflow-hidden border-2 border-slate-700 bg-slate-900">
       
       <!-- Background / Scene (blurred or stylized) -->
-      <div class="absolute inset-0 opacity-30 bg-[url('/images/scanlines.png')] bg-repeat z-10 pointer-events-none"></div>
+      <div class="absolute inset-0 opacity-30 bg-scanlines z-10 pointer-events-none"></div>
       
       <!-- NPC Image -->
       <div class="relative z-0 w-full h-full flex items-center justify-center p-8">
@@ -59,7 +64,8 @@
             </p>
             
             <div class="mt-auto pt-4 flex justify-end">
-               <span class="text-xs text-slate-500 font-mono animate-pulse">CLIQUE EM 'SAIR' PARA CONTINUAR INVESTIGAÇÃO</span>
+               <span v-if="!isGameOver" class="text-xs text-slate-500 font-mono animate-pulse">CLIQUE EM 'SAIR' PARA CONTINUAR INVESTIGAÇÃO</span>
+               <span v-else class="text-xs text-red-500 font-mono animate-pulse">INVESTIGAÇÃO ENCERRADA.</span>
             </div>
           </div>
         </RetroCard>
@@ -87,6 +93,8 @@ const { id, placeId } = route.params
 const placeName = ref(history.state.placeName || 'LOCAL')
 const npcName = ref(history.state.placeName ? `${history.state.placeName} Staff` : 'NPC') 
 const rawDialogue = ref(history.state.dialogue || '')
+const isGameOver = ref(history.state.gameOver || false)
+const debriefData = ref(history.state.debriefData || null)
 
 // Fallback image logic:
 const npcImage = ref(null) 
@@ -115,6 +123,17 @@ const leavePlace = () => {
   router.push(`/cases/${id}/city`)
 }
 
+const goToDebriefing = () => {
+    if (debriefData.value) {
+        router.push({
+            path: `/cases/${id}/debriefing`,
+            query: debriefData.value
+        })
+    } else {
+        router.push(`/cases/${id}/debriefing`)
+    }
+}
+
 const handleImageError = (e) => {
     e.target.src = '/images/suspect-placeholder.png'
 }
@@ -127,6 +146,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.bg-scanlines {
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0),
+    rgba(255,255,255,0) 50%,
+    rgba(0,0,0,0.2) 50%,
+    rgba(0,0,0,0.2)
+  );
+  background-size: 100% 4px;
+}
+
 .typing-effect {
   animation: fadeIn 0.5s ease-out;
 }

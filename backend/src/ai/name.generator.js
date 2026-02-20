@@ -9,34 +9,36 @@ const NAME_SEEDS = [
   "Cidades e ventos famosos",
 ];
 
-export async function generateSuspectName(index = 0) {
+export async function generateSuspectName(index = 0, gender = 'Indefinido') {
   const theme = NAME_SEEDS[index % NAME_SEEDS.length];
 
   const system = `
-Você cria nomes fictícios para um jogo de detetive.
-Os nomes devem ser distintos entre si.
-`;
+    Você cria nomes fictícios para um jogo de detetive.
+    O nome deve respeitar o gênero fornecido.
+    Os nomes devem ser distintos entre si.
+    `;
 
   const user = `
-Tema: ${theme}
+    Tema: ${theme}
+    Gênero do Personagem: ${gender}
 
-Gere APENAS UM nome completo fictício para um personagem.
-
-REGRAS OBRIGATÓRIAS:
-- Retorne UMA ÚNICA linha
-- SEM listas
-- SEM numeração
-- SEM vírgulas
-- SEM explicações
-- Nome + sobrenome apenas
-- Máximo 3 palavras
-
-Exemplo válido:
-"Victor Marlowe"
-
-Exemplo INVÁLIDO:
-"1. Victor Marlowe 2. John Smith"
-`;
+    Gere APENAS UM nome completo fictício para um personagem deste gênero.
+    
+    REGRAS OBRIGATÓRIAS:
+    - Retorne UMA ÚNICA linha
+    - SEM listas
+    - SEM numeração
+    - SEM vírgulas
+    - SEM explicações
+    - Nome + sobrenome apenas
+    - Máximo 3 palavras
+    
+    Exemplo válido:
+    "Victor Marlowe"
+    
+    Exemplo INVÁLIDO:
+    "1. Victor Marlowe 2. John Smith"
+    `;
 
   const rawName = await callOpenAI({ system, user });
   return normalizeName(rawName);

@@ -4,6 +4,7 @@ import {
   getProfileService,
   updateProfileService,
   getProfileByNameService,
+  getProfileByUserService,
 } from "../services/profile.service.js";
 
 export async function createProfileController(req, res, next) {
@@ -60,6 +61,17 @@ export async function getProfileController(req, res, next) {
     );
 
     res.json({ ok: true, profile });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getMeController(req, res, next) {
+  try {
+    const profile = await getProfileByUserService(req.user?.userId);
+    // Directly return the profile object or null
+    // If null, it means no profile created yet (frontend handles this by showing create screen)
+    res.json(profile || null);
   } catch (err) {
     next(err);
   }

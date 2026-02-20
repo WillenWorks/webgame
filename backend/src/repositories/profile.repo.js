@@ -29,9 +29,11 @@ export async function findProfilesByUser(userId) {
       p.reputation_score,
       p.cases_solved,
       p.cases_failed,
-      r.title AS rank_title
+      r.title AS rank_title,
+      r.min_xp AS rank_min_xp,
+      r.max_xp AS rank_max_xp
     FROM profiles p
-    JOIN ranks r ON r.id = p.rank_id
+    LEFT JOIN ranks r ON r.id = p.rank_id
     WHERE p.user_id = ?
     ORDER BY p.created_at ASC
   `;
@@ -41,7 +43,10 @@ export async function findProfilesByUser(userId) {
 
 export async function findProfileById(profileId) {
   const sql = `
-    SELECT * FROM profiles WHERE id = ?
+    SELECT p.*, r.title as rank_title 
+    FROM profiles p 
+    LEFT JOIN ranks r ON r.id = p.rank_id
+    WHERE p.id = ?
   `;
   const [rows] = await pool.execute(sql, [profileId]);
   return rows[0];
@@ -72,9 +77,21 @@ export async function updateProfileStats(profileId, data) {
 export async function getProfileByUserId(userId) {
   const [rows] = await pool.execute(
     `
-    SELECT *
-    FROM profiles
-    WHERE user_id = ?
+    SELECT 
+      p.id,
+      p.detective_name,
+      p.user_id,
+      p.rank_id,
+      p.xp,
+      p.reputation_score,
+      p.cases_solved,
+      p.cases_failed,
+      p.created_at,
+      r.title AS rank_title,
+      r.min_xp AS rank_min_xp
+    FROM profiles p
+    LEFT JOIN ranks r ON r.id = p.rank_id
+    WHERE p.user_id = ?
     LIMIT 1
     `,
     [userId]

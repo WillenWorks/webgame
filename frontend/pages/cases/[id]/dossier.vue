@@ -186,14 +186,21 @@ const labels = {
 const filtersConfig = {
   sex_id: [
     { id: 2, label: 'Masculino' }, 
-    { id: 1, label: 'Feminino' }
+    { id: 1, label: 'Feminino' },
+    { id: 3, label: 'Outro' }
   ],
   hair_id: [
     { id: 1, label: 'Preto' },
     { id: 2, label: 'Castanho' },
     { id: 3, label: 'Loiro' },
     { id: 4, label: 'Ruivo' },
-    { id: 5, label: 'Grisalho' }
+    { id: 5, label: 'Grisalho' },
+    { id: 6, label: 'Careca' },
+    { id: 7, label: 'Colorido' },
+    { id: 8, label: 'Trançado' },
+    { id: 9, label: 'Longo' },
+    { id: 10, label: 'Curto' },
+    { id: 11, label: 'Encaracolado' }
   ],
   hobby_id: [
     { id: 1, label: 'Fotografia' },
@@ -201,6 +208,22 @@ const filtersConfig = {
     { id: 3, label: 'Leitura' },
     { id: 4, label: 'Dança' },
     { id: 5, label: 'Culinária' },
+    { id: 6, label: 'Tênis' },
+    { id: 7, label: 'Croquet' },
+    { id: 8, label: 'Paraquedismo' },
+    { id: 9, label: 'Mergulho' },
+    { id: 10, label: 'Xadrez' },
+    { id: 11, label: 'Jardinagem' },
+    { id: 12, label: 'Yoga' },
+    { id: 13, label: 'Pintura' },
+    { id: 14, label: 'Astronomia' },
+    { id: 15, label: 'Volêi' },
+    { id: 16, label: 'História' },
+    { id: 17, label: 'Arqueologia' },
+    { id: 18, label: 'Colecionismo' },
+    { id: 19, label: 'Críquete' },
+    { id: 20, label: 'Polo' },
+    { id: 21, label: 'Esgrima' }
   ],
   feature_id: [
     { id: 1, label: 'Cicatriz' },
@@ -208,12 +231,33 @@ const filtersConfig = {
     { id: 3, label: 'Óculos' },
     { id: 4, label: 'Chapéu' },
     { id: 5, label: 'Barba' }, 
+    { id: 6, label: 'Joia Exótica' },
+    { id: 7, label: 'Anel de Rubi' },
+    { id: 8, label: 'Colar de Pérolas' },
+    { id: 9, label: 'Bengala' },
+    { id: 10, label: 'Luvas' },
+    { id: 11, label: 'Sarda' },
+    { id: 12, label: 'Marca de Nascença' },
+    { id: 13, label: 'Monóculo' },
+    { id: 14, label: 'Relógio de Bolso' }
   ],
   vehicle_id: [
     { id: 1, label: 'Conversível' },
     { id: 2, label: 'Limousine' },
     { id: 3, label: 'Esportivo' },
-    { id: 4, label: 'Motocicleta' }
+    { id: 4, label: 'Motocicleta' },
+    { id: 5, label: 'Limousine' },
+    { id: 6, label: 'Moto Esportiva' },
+    { id: 7, label: 'Jato Privado' },
+    { id: 8, label: 'Iate' },
+    { id: 9, label: 'Bicicleta' },
+    { id: 10, label: 'Tuk-tuk' },
+    { id: 11, label: 'Caminhão' },
+    { id: 12, label: 'Helicóptero' },
+    { id: 13, label: 'Carro Antigo' },
+    { id: 14, label: 'Hovercraft' },
+    { id: 15, label: 'Dirigível' },
+    { id: 16, label: 'Veleiro' }
   ]
 }
 
@@ -236,7 +280,7 @@ const loadState = async () => {
     if (notes) {
        // Populate filters with saved notes
        Object.keys(filters.value).forEach(k => {
-          if (notes[k]) filters.value[k] = notes[k]
+          if (notes?.notes[k]) filters.value[k] = notes?.notes[k]
        })
     }
 

@@ -17,15 +17,18 @@
         <div class="space-y-6 p-4">
           <div class="text-center">
             <h3 class="text-slate-500 text-xs uppercase mb-1">CASOS RESOLVIDOS</h3>
-            <p class="text-4xl text-green-400 font-display">{{ profile?.solved_cases || 0 }}</p>
+            <p class="text-4xl text-green-400 font-display">{{ profile?.cases_solved || 0 }}</p>
           </div>
           <div class="text-center">
             <h3 class="text-slate-500 text-xs uppercase mb-1">FALHAS</h3>
-            <p class="text-4xl text-red-500 font-display">{{ profile?.failed_cases || 0 }}</p>
+            <p class="text-4xl text-red-500 font-display">{{ profile?.cases_failed || 0 }}</p>
           </div>
           <div class="border-t border-slate-700 pt-4">
             <h3 class="text-slate-500 text-xs uppercase mb-2">RANK ATUAL</h3>
-            <p class="text-xl text-amber-400 font-display uppercase">{{ profile?.rank?.label || 'RECRUTA' }}</p>
+            <!-- Safe access to rank_title (from flat profile) or rank object (from legacy) -->
+            <p class="text-xl text-amber-400 font-display uppercase">
+                {{ profile?.rank_title || profile?.rank?.label || 'RECRUTA' }}
+            </p>
             <div class="w-full bg-slate-900 h-2 mt-2">
                <div class="bg-amber-400 h-full" :style="{ width: calculateXpProgress() + '%' }"></div>
             </div>
@@ -107,7 +110,6 @@ const fetchHistory = async () => {
   if (!profile.value) return
   loadingHistory.value = true
   try {
-    // Usamos o profile summary que agora retorna recentPerformance real do banco
     const res = await api(`/profiles/${profile.value.id}/summary`)
     if (res && res.summary && res.summary.recentPerformance) {
        history.value = res.summary.recentPerformance
@@ -125,20 +127,33 @@ const goToDashboard = () => {
 
 const calculateXpProgress = () => {
   if (!profile.value) return 0
-  const { min_xp, max_xp } = profile.value.rank
+  
+  // Logic updated for flat structure (from /me endpoint)
+  const min_xp = profile.value.rank_min_xp ?? profile.value.rank?.min_xp ?? 0
+  const max_xp = profile.value.rank_max_xp ?? profile.value.rank?.max_xp ?? null
+  
   if (!max_xp) return 100
   const current = profile.value.xp - min_xp
   const total = max_xp - min_xp
   return Math.min(100, Math.max(0, (current / total) * 100))
 }
 
-const formatDate = (iso) => {
-  if (!iso) return 'DATA DESCONHECIDA'
+const formatDate = (val) => {
+  if (!val) return 'DATA DESCONHECIDA'
+  
+  if (typeof val === 'string' && /^\d{14}/.test(val)) {
+    const y = val.substring(0, 4)
+    const m = val.substring(4, 6)
+    const d = val.substring(6, 8)
+    return `${d}/${m}/${y}`
+  }
+
   try {
-    const d = new Date(iso)
+    const d = new Date(val)
+    if (isNaN(d.getTime())) return val
     return d.toLocaleDateString('pt-BR')
   } catch {
-    return iso
+    return val
   }
 }
 </script>

@@ -29,8 +29,10 @@ export async function getProfileSummary({ profileId }) {
   // Nota: active_cases pode não ter XP detalhado se não usarmos tabela separada, 
   // mas vamos tentar juntar com xp_history se possível, ou apenas listar os casos
   const [perfRows] = await pool.execute(
-    `SELECT ac.id, ac.status, ac.stolen_object, ac.difficulty_id, ac.start_time, ac.status AS difficulty
+    `SELECT ac.id, ac.status, ac.stolen_object, ac.difficulty_id, ac.start_time, 
+            psh.xp as xp_earned
      FROM active_cases ac
+     LEFT JOIN profile_stats_history psh ON psh.case_id = ac.id
      WHERE ac.profile_id = ? AND ac.status IN ('SOLVED', 'FAILED')
      ORDER BY ac.start_time DESC
      LIMIT 10`,
@@ -40,8 +42,8 @@ export async function getProfileSummary({ profileId }) {
   // Mapear para o formato esperado pelo front
   const recentPerformance = perfRows.map(row => ({
     status: row.status,
-    created_at: row.start_time, // fallback
-    xp_awarded: 0, // TODO: join with xp_history if needed
+    created_at: row.start_time, 
+    xp_awarded: row.xp_earned || 0,
     difficulty: row.difficulty_id === 1 ? 'EASY' : (row.difficulty_id === 2 ? 'HARD' : 'EXTREME'),
     summary: row.stolen_object
   }));

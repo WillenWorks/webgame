@@ -7,7 +7,7 @@
 
       <!-- EFEITOS CRT/RETRO -->
       <div
-        class="absolute inset-0 pointer-events-none z-50 mix-blend-overlay opacity-30 bg-[url('/images/scanlines.png')] bg-repeat">
+        class="absolute inset-0 pointer-events-none z-50 mix-blend-overlay opacity-30 bg-scanlines">
       </div>
       <div
         class="absolute inset-0 pointer-events-none z-40 bg-gradient-to-b from-transparent via-cyan-900/5 to-transparent">
@@ -336,7 +336,7 @@ const updateCalibration = () => {
   } else if (w < 1920) { // Standard Desktop
     CALIBRATION.value = { xOffset: -180, yOffset: 35, xScale: 0.85, yScale: 0.90 }
   } else { // Widescreen
-    CALIBRATION.value = { xOffset: -170, yOffset: 45, xScale: 0.73, yScale: 0.90 }
+    CALIBRATION.value = { xOffset: -170, yOffset: 50, xScale: 0.70, yScale: 0.75 }
   }
   console.log('Window width:', w);
   console.log('Calibration updated:', CALIBRATION.value);
@@ -451,8 +451,8 @@ function confirmTravel() {
   Promise.all([travelPromise, animationPromise])
     .then(([res]) => {
       if (res?.gameOver || lastGameOver.value) {
-        alert(lastGameOver.value === "WIN" ? "MISSÃO CUMPRIDA!" : "FIM DE JOGO!")
-        router.push('/')
+        const status = lastGameOver.value === "WIN" ? "SOLVED" : "FAILED";
+        router.push(`/cases/${caseId}/debriefing?status=${status}`)
         return
       }
       router.push(`/cases/${caseId}/city`)
@@ -489,6 +489,7 @@ onMounted(async () => {
 
   try {
     const visit = await visitCurrentCity(caseId)
+    console.log('[MAP] Current City Visit Data:', visit)
     if (!visit?.city) return
 
     currentCity.value = {
@@ -517,8 +518,8 @@ onMounted(async () => {
     // ----------------------------------------------------------------
 
     if (lastGameOver.value) {
-      alert(lastGameOver.value === "WIN" ? "MISSÃO CUMPRIDA!" : "FIM DE JOGO: O tempo acabou ou o suspeito escapou.")
-      router.push('/')
+      const status = lastGameOver.value === "WIN" ? "SOLVED" : "FAILED";
+      router.push(`/cases/${caseId}/debriefing?status=${status}`)
     }
   } catch (e) {
     console.error('Erro ao carregar mapa:', e)
@@ -531,6 +532,17 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.bg-scanlines {
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0),
+    rgba(255,255,255,0) 50%,
+    rgba(0,0,0,0.2) 50%,
+    rgba(0,0,0,0.2)
+  );
+  background-size: 100% 4px;
+}
+
 .retro-btn-icon {
   @apply w-10 h-10 flex items-center justify-center bg-slate-900 border border-cyan-500 text-cyan-400 font-mono hover:bg-cyan-500 hover:text-black transition-colors active:scale-95 shadow-lg text-lg;
 }

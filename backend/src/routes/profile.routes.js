@@ -2,11 +2,14 @@ import { z } from 'zod';
 import { validateBody, validateParams, zId } from '../middlewares/validate.middleware.js';
 import { requireProfileMiddleware } from '../middlewares/require_profile.middleware.js';
 import { Router } from 'express';
-import { listProfilesController, createProfileController, getProfileController, updateProfileController, getProfileByNameController } from '../controllers/profile.controller.js';
+import { listProfilesController, createProfileController, getProfileController, updateProfileController, getProfileByNameController, getMeController } from '../controllers/profile.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 router.use(authMiddleware);
+
+// GET /profiles/me → busca o perfil do usuário logado (ATENÇÃO: deve vir antes de :profileId)
+router.get('/me', getMeController);
 
 // GET /profiles → lista todos do usuário logado
 router.get('/', requireProfileMiddleware, listProfilesController);

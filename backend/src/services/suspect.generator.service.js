@@ -11,23 +11,38 @@ const ATTR_TABLES = {
   feature_id: "attr_feature",
 };
 
-const SUSPECT_COUNT = 6;
+const SUSPECT_COUNT = 12;
 
 // quantos valores distintos mínimos por atributo
 const DIVERSITY_RULES = {
   sex_id: 2,
-  hair_id: 3,
-  hobby_id: 3,
-  vehicle_id: 2,
-  feature_id: 2,
+  hair_id: 5,
+  hobby_id: 5,
+  vehicle_id: 4,
+  feature_id: 4,
 };
 
 async function generateAttributePool(table, count) {
-  const pool = new Set();
-  while (pool.size < count) {
-    pool.add(await getRandomAttribute(table));
+  const pool = [];
+  const ids = new Set();
+  let attempts = 0;
+  
+  while (pool.length < count && attempts < 30) {
+    attempts++;
+    const attr = await getRandomAttribute(table); // returns {id, name}
+    if (!attr) continue;
+    if (!ids.has(attr.id)) {
+      ids.add(attr.id);
+      pool.push(attr);
+    }
   }
-  return Array.from(pool);
+  
+  // Fallback se faltar diversidade (duplicar existentes)
+  while (pool.length < count && pool.length > 0) {
+      pool.push(pool[0]); 
+  }
+  
+  return pool;
 }
 
 export async function generateSuspectsForCase(caseId) {
@@ -41,39 +56,49 @@ export async function generateSuspectsForCase(caseId) {
   }
 
   // 2️⃣ Criar culpado usando o primeiro valor de cada pool
-  const culprit = {};
+  const culpritAttrs = {};
+  const culpritDb = {};
+  
   for (const key in pools) {
-    culprit[key] = pools[key][0];
+    const obj = pools[key][0];
+    culpritAttrs[key] = obj;
+    culpritDb[key] = obj.id;
   }
 
   const culpritId = uuid();
-  const culpritName = await generateSuspectName(0);
+  // Passar genero para gerador de nome
+  const culpritSex = culpritAttrs['sex_id']?.name || 'Indefinido';
+  const culpritName = await generateSuspectName(0, culpritSex);
 
   await insertSuspect({
     id: culpritId,
     case_id: caseId,
     name: culpritName,
-    ...culprit,
+    ...culpritDb,
     is_culprit: true,
   });
 
   // 3️⃣ Criar inocentes
   for (let i = 1; i < SUSPECT_COUNT; i++) {
-    const decoy = {};
+    const decoyDb = {};
+    const decoyAttrs = {};
 
     for (const key in pools) {
       // distribui valores do pool ciclicamente
-      decoy[key] = pools[key][i % pools[key].length];
+      const obj = pools[key][i % pools[key].length];
+      decoyAttrs[key] = obj;
+      decoyDb[key] = obj.id;
     }
 
     const decoyId = uuid();
-    const decoyName = await generateSuspectName(i);
+    const decoySex = decoyAttrs['sex_id']?.name || 'Indefinido';
+    const decoyName = await generateSuspectName(i, decoySex);
 
     await insertSuspect({
       id: decoyId,
       case_id: caseId,
       name: decoyName,
-      ...decoy,
+      ...decoyDb,
       is_culprit: false,
     });
   }

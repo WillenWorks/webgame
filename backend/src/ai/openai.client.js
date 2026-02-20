@@ -6,7 +6,7 @@ const openai = new OpenAI({
   timeout: Number(env.OPENAI_TIMEOUT || 10000),
 });
 
-export async function callOpenAI({ system, user }) {
+export async function callOpenAI({ system, user, options = {} }) {
   const messages = [];
   if (typeof system === 'string' && system.trim().length > 0) {
     messages.push({ role: 'system', content: system });
@@ -27,8 +27,9 @@ export async function callOpenAI({ system, user }) {
       const completion = await openai.chat.completions.create({
         model: env.OPENAI_MODEL || 'gpt-4.1-mini',
         messages,
-        temperature: 0.7,
-        max_tokens: 80,
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.max_tokens ?? 350,
+        response_format: options.json ? { type: "json_object" } : undefined
       });
 
       const text = completion?.choices?.[0]?.message?.content;

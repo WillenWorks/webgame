@@ -6,6 +6,7 @@ import {
   findProfileByName,
   updateProfileName,
   updateProfileStats,
+  getProfileByUserId,
 } from '../repositories/profile.repo.js';
 
 export async function createProfileService({ userId, detectiveName }) {
@@ -48,6 +49,10 @@ export async function getProfileService(profileId, userId) {
     throw new Error('Perfil não encontrado');
   }
   return profile;
+}
+
+export async function getProfileByUserService(userId) {
+  return getProfileByUserId(userId);
 }
 
 /**

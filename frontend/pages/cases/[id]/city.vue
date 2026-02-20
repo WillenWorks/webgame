@@ -64,7 +64,7 @@
           <p class="animate-pulse text-cyan-400">ESCANEANDO ÁREA...</p>
         </div>
         
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 overflow-y-auto custom-scrollbar">
+        <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
             v-for="place in places"
             :key="place.id"
@@ -84,6 +84,7 @@
                 <!-- Environment Type REMOVED as requested -->
               </div>
             </div>
+            <div class="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-[0_0_5px_#f59e0b]"></div>
           </button>
         </div>
       </RetroCard>
@@ -203,22 +204,14 @@ const slugify = (text) => {
 }
 
 const getCityImageUrl = (cityName) => {
+  console.log('Getting image URL for city:', slugify(cityName))
     // Logic: public/images/cities/nome-da-cidade.jpeg
     // User requested "nome da cidade que vem do banco". 
     // Usually filenames are lowercase slugified.
     if (!cityName) return '/images/city_bg.jpg'
     // Assuming .jpeg or .jpg. We try .jpeg first as per common assets
-    return `/images/cities/${slugify(cityName)}/aeroporto.jpeg`.replace('aeroporto.jpeg', '') + `${slugify(cityName)}.jpeg`
-    // Actually simpler: /images/cities/<slug>.jpeg 
-    // Wait, user said: "public/images/cities/'nome da cidade que vem do banco'"
-    // Let's assume just slugified name + extension. 
-    // Or if the folder structure is /images/cities/<city_id>/... 
-    // The user example for places was: public/images/cities/places/'id'/'place'.
-    // For cities: "public/images/cities/'nome'".
-    // Let's stick to a safe path construction.
-    
-    // Check if the structure is flat for cities:
     return `/images/cities/${slugify(cityName)}.jpeg`
+
 }
 
 const getPlaceImage = (place) => {
@@ -230,7 +223,7 @@ const getPlaceImage = (place) => {
     const placeName = slugify(place.name)
     
     // Check extension logic. Assuming .jpeg based on previous file lists.
-    return `/images/cities/${cityId}/${placeName}.jpeg`
+    return `/images/cities/places/${cityId}/${placeName}.jpeg`
 }
 
 const handleCityImgError = (e) => {

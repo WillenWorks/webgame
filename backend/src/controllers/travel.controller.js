@@ -32,11 +32,11 @@ export async function getTravelQuoteController(req, res, next) {
       return res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: 'Cidade atual não encontrada' } });
     }
 
-    const minutes = await estimateTravelMinutes({
-      fromCityId: currentCity.city_id,
-      toCityId: toCityId,
+    const minutes = await estimateTravelMinutes(
+      currentCity.city_id,
+      toCityId,
       caseId
-    });
+    );
 
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;

@@ -70,7 +70,8 @@ async function getCaseDifficultyLabel(caseId) {
 }
 
 // Estima minutos de viagem entre cidades (ajustado por dificuldade do caso)
-export async function estimateTravelMinutes({ fromCityId, toCityId, caseId = null }) {
+export async function estimateTravelMinutes(fromCityId, toCityId, caseId = null ) {
+
   // 1) Override direto do DB
   const override = await getTravelOverrideMinutes(fromCityId, toCityId);
   if (override != null) return override;
@@ -78,6 +79,7 @@ export async function estimateTravelMinutes({ fromCityId, toCityId, caseId = nul
   // 2) Buscar lat/lng
   const from = await getCityById(fromCityId);
   const to = await getCityById(toCityId);
+
   if (!from || !to) throw new Error('Cidade inválida para cálculo de viagem');
 
   const km = haversineKm(from.lat, from.lng, to.lat, to.lng);
@@ -197,7 +199,7 @@ export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = D
   // Simular consumo conforme rota esperada
   let simulatedMinutes = 0;
   for (const step of expectedRoute) {
-    const travelMin = await estimateTravelMinutes({ fromCityId: step.from, toCityId: step.to, caseId });
+    const travelMin = await estimateTravelMinutes(step.from, step.to, caseId );
     simulatedMinutes += travelMin;
     const visitsCount = Math.max(0, step.visits || 0);
     simulatedMinutes += visitsCount * 30; // VISIT_MINUTES = 30

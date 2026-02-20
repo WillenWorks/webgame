@@ -1,22 +1,5 @@
 import { AI_INTENT } from "./ai.types.js";
 
-/**
- * Prompt refinado para narrativa dos NPCs (pt-BR), com controle por dificuldade,
- * contexto de fase (decoy vs correta) e estilo de interação.
- *
- * Parâmetros esperados:
- * - intent: AI_INTENT.CLUE_TEXT
- * - archetype: string (ex.: "Formal", "Intelectual", "Desconfiado", "Cultural", etc)
- * - reputation: string (ex.: "NEUTRA", "ALTA", "BAIXA")
- * - difficulty: number (ex.: 1.0 padrão; >1.0 = mais sutil)
- * - context: {
- *     city?: string,
- *     truth?: { targetType: 'CITY'|'VILLAIN_ATTR'|'NONE', targetValue?: string },
- *     mode?: 'primary'|'decoy'|'final',
- *     phase?: number // 1..5
- *     clue_type?: 'WARNING'|'CAPTURE'|'NEXT_LOCATION'|'VILLAIN_ATTRIBUTE'
- *   }
- */
 export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, context }) {
   if (!Object.values(AI_INTENT).includes(intent)) {
     throw new Error(
@@ -76,10 +59,25 @@ export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, c
 
   // Regras por tipo de alvo
   const targetRules = [];
+  const category = context?.topicCategory; // "Food", "Flag", "Currency", etc.
+
   if (targetType === "CITY") {
+    if (category) {
+      // Regras específicas baseadas na Categoria sorteada pelo Backend
+      targetRules.push(
+        `A pista DEVE focar EXCLUSIVAMENTE em: ${category}.`,
+        `Cite um elemento específico de ${category} sobre o local de destino (${targetValue}).`,
+        `Não use termos genéricos. Seja específico (ex: se for Moeda, diga o nome da moeda; se for Comida, diga o prato).`
+      );
+    } else {
+      // Fallback genérico
+      targetRules.push(
+        "A pista deve apontar indiretamente para a próxima cidade/país (marco, moeda, tradição, geografia, clima, bandeira).",
+        "IMPORTANTE: Cite um PRATO TÍPICO, VESTIMENTA, ANIMAL ou MONUMENTO ESPECÍFICO do local de destino."
+      );
+    }
+    
     targetRules.push(
-      "A pista deve apontar indiretamente para a próxima cidade (marco, moeda, tradição, geografia, clima, bandeira).",
-      "EVITE REPETIR 'MOEDA'. Varie entre comida típica, roupas, monumentos, animais locais ou fatos históricos.",
       "Exemplo BOM: 'Ele queria trocar dinheiro por Yens.' / 'Ele perguntou onde ficava a Torre Eiffel.'",
       "Exemplo RUIM: 'Ele foi para Paris.' (Muito direto)",
     );
@@ -87,42 +85,44 @@ export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, c
     targetRules.push(
       "A pista deve sugerir discretamente um atributo do vilão (veículo, hobby, cabelo, traço).",
       "Descreva como comentário ouvido/observado. Ex: 'Vi alguém com um anel estranho.' ou 'Ele lia um livro sobre montanhismo.'",
+      "ATENÇÃO: Use APENAS o atributo fornecido na 'Informação Verdadeira'. NÃO invente outros atributos (ex: não diga que fumava se não estiver listado).",
     );
   } else if (clueType !== 'WARNING' && clueType !== 'CAPTURE') {
     targetRules.push("Se não houver alvo útil, produza observação genérica sobre o dia ou a cidade.");
   }
 
   const system = `
-Você é um NPC de um jogo de detetive estilo Carmen Sandiego, localizado na cidade de ${context?.city || "Desconhecida"}.
-Você fala Português Brasileiro (pt-BR).
+    Você é um NPC de um jogo de detetive estilo Carmen Sandiego, localizado na cidade de ${context?.city || "Desconhecida"}.
+    Você fala Português Brasileiro (pt-BR).
 
-SUA PERSONALIDADE: ${archetype || "Cidadão Comum"}
-SUA ATITUDE: ${reputationRules}
+    SUA PERSONALIDADE: ${archetype || "Cidadão Comum"}
+    SUA ATITUDE: ${reputationRules}
 
-Regras ABSOLUTAS:
-- Fale como uma pessoa real, não como um sistema.
-- NUNCA use termos como 'jogador', 'NPC', 'pista', 'decoy', 'jogo', 'mapa', 'interface'.
-- Mantenha a imersão total (Diegético).
-- Resposta curta (máximo 2 frases).
-- Se for dar uma pista, não seja óbvio demais, mas seja justo.
-`.trim();
+    Regras ABSOLUTAS:
+    - Fale como uma pessoa real, não como um sistema.
+    - NUNCA use termos como 'jogador', 'NPC', 'pista', 'decoy', 'jogo', 'mapa', 'interface'.
+    - NUNCA INVENTE ATRIBUTOS FÍSICOS para o vilão que não foram fornecidos.
+    - Mantenha a imersão total (Diegético).
+    - Resposta curta (máximo 2 frases).
+    - Se for dar uma pista, não seja óbvio demais, mas seja justo.
+    `.trim();
 
   const user = `
-CONTEXTO DO ENCONTRO:
-- O detetive perguntou se você viu alguém suspeito recentemente.
-- Tipo de Interação: ${clueType}
-- Dificuldade/Sutileza: ${subtlety}
+    CONTEXTO DO ENCONTRO:
+    - O detetive perguntou se você viu alguém suspeito recentemente.
+    - Tipo de Interação: ${clueType}
+    - Dificuldade/Sutileza: ${subtlety}
 
-INFORMAÇÃO VERDADEIRA (A PISTA):
-- Tipo: ${targetType}
-- Conteúdo: ${targetValue ?? "(Nenhuma informação relevante)"}
+    INFORMAÇÃO VERDADEIRA (A PISTA):
+    - Tipo: ${targetType}
+    - Conteúdo: ${targetValue ?? "(Nenhuma informação relevante)"}
 
-ORIENTAÇÕES ESPECÍFICAS:
-${modeRules.join("\n")}
-${targetRules.join("\n")}
+    ORIENTAÇÕES ESPECÍFICAS:
+    ${modeRules.join("\n")}
+    ${targetRules.join("\n")}
 
-Gere a resposta do personagem:
-`.trim();
+    Gere a resposta do personagem:
+    `.trim();
 
   return { system, user };
 }

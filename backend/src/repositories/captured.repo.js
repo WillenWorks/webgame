@@ -8,3 +8,14 @@ export async function insertCapturedVillainLog({ id, profileId, caseId, villainN
   `;
   await pool.execute(sql, [id, profileId, caseId || null, villainName, JSON.stringify(attributesSnapshot || null), finalDialogue || null]);
 }
+
+export async function getCapturedVillains(profileId) {
+  const sql = `
+    SELECT * 
+    FROM captured_villains_log 
+    WHERE profile_id = ? 
+    ORDER BY created_at DESC
+  `;
+  const [rows] = await pool.execute(sql, [profileId]);
+  return rows;
+}

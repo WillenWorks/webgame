@@ -26,6 +26,7 @@ export async function travelService(caseId, destinationCityId) {
   await initCurrentViewTable();
 
   const currentStep = await getCurrentRouteStep(caseId);
+
   if (!currentStep) {
     throw new Error('Não há mais cidades para visitar neste caso');
   }
@@ -37,7 +38,8 @@ export async function travelService(caseId, destinationCityId) {
   }
 
   const locationClues = await countLocationClues(caseId, currentStep.city_id);
-  if (locationClues < 1) {
+ 
+  if (locationClues < 1 && currentStep.step_order === 1) { 
     const reason = 'Sem pista de localidade suficiente';
     await insertTravelLog({ id: uuid(), caseId, fromCityId: currentStep.city_id, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason });
     throw new Error('Você precisa de ao menos uma pista antes de viajar');

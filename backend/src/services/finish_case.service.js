@@ -4,8 +4,7 @@ import { solveCase, getCaseById } from '../repositories/warrant.repo.js';
 import { findProfileById, updateProfileStats } from '../repositories/profile.repo.js';
 import { upsertPlayerReputation } from '../repositories/player_reputation.repo.js';
 import { computeXP } from './xp.service.js';
-import { getCasePerformanceController } from '../controllers/case_performance.controller.js'; 
-// Note: computeXP expects a performance object.
+import { insertProfileStatsHistory } from '../repositories/profile_stats_history.repo.js';
 
 /**
  * Centralized logic to finish a case (SOLVED or FAILED)
@@ -88,6 +87,18 @@ export async function finishCaseService({ caseId, status, finalDialogue, timeSta
     playerId: profileId,
     caseId,
     reputationScore: newRepScore
+  });
+
+  // 7. Insert Full Stats History (Snapshot for Dossier)
+  await insertProfileStatsHistory({
+    id: uuid(),
+    profileId,
+    caseId,
+    xp: xpEarned,
+    reputationScore: newRepScore,
+    rankId: profile.rank_id, // Snapshot current rank
+    casesSolved: updates.cases_solved,
+    casesFailed: updates.cases_failed
   });
 
   return {
