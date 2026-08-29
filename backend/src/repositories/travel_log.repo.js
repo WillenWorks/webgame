@@ -1,54 +1,78 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
 
-/**
- * Inicializa a tabela de logs de viagem caso não exista.
- */
+/** Tabela gerenciada pelas migrations do Prisma. */
 export async function initTravelLogTable() {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS case_travel_log (
-      id CHAR(36) NOT NULL,
-      active_case_id CHAR(36) NOT NULL,
-      from_city_id INT NOT NULL,
-      to_city_id INT NOT NULL,
-      step_order INT NOT NULL,
-      success TINYINT(1) NOT NULL DEFAULT 0,
-      reason VARCHAR(255) NULL,
-      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (id),
-      KEY active_case_id_idx (active_case_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `;
-  await pool.execute(sql);
+  /* no-op */
 }
 
-export async function insertTravelLog({ id, caseId, fromCityId, toCityId, stepOrder, success, reason }) {
-  const sql = `
-    INSERT INTO case_travel_log
-      (id, active_case_id, from_city_id, to_city_id, step_order, success, reason)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `;
-  await pool.execute(sql, [id, caseId, fromCityId, toCityId, stepOrder, success ? 1 : 0, reason || null]);
+function toRow(l) {
+  if (!l) return null;
+  return {
+    id: l.id,
+    active_case_id: l.activeCaseId,
+    from_city_id: l.fromCityId,
+    to_city_id: l.toCityId,
+    step_order: l.stepOrder,
+    success: l.success,
+    reason: l.reason,
+    arrival_time: l.arrivalTime,
+    created_at: l.createdAt,
+  };
+}
+
+export async function insertTravelLog({ id, caseId, fromCityId, toCityId, stepOrder, success, reason, arrivalTime = null }) {
+  await prisma.caseTravelLog.create({
+    data: {
+      id,
+      activeCaseId: caseId,
+      fromCityId: Number(fromCityId),
+      toCityId: Number(toCityId),
+      stepOrder: Number(stepOrder),
+      success: Boolean(success),
+      reason: reason || null,
+      arrivalTime: arrivalTime || null,
+    },
+  });
 }
 
 export async function getTravelLogs(caseId) {
-  const sql = `
-    SELECT id, active_case_id, from_city_id, to_city_id, step_order, success, reason, created_at
-    FROM case_travel_log
-    WHERE active_case_id = ?
-    ORDER BY created_at DESC
-  `;
-  const [rows] = await pool.execute(sql, [caseId]);
-  return rows;
+  const rows = await prisma.caseTravelLog.findMany({
+    where: { activeCaseId: caseId },
+    orderBy: { createdAt: 'desc' },
+  });
+  return rows.map(toRow);
 }
 
 export async function getLastTravelLogForStep(caseId, stepOrder) {
-  const sql = `
-    SELECT id, active_case_id, from_city_id, to_city_id, step_order, success, reason, created_at
-    FROM case_travel_log
-    WHERE active_case_id = ? AND step_order = ?
-    ORDER BY created_at DESC
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, stepOrder]);
-  return rows[0] || null;
+  return toRow(
+    await prisma.caseTravelLog.findFirst({
+      where: { activeCaseId: caseId, stepOrder: Number(stepOrder) },
+      orderBy: { createdAt: 'desc' },
+    })
+  );
+}
+
+export async function getLastTravelLog(caseId) {
+  return toRow(
+    await prisma.caseTravelLog.findFirst({
+      where: { activeCaseId: caseId },
+      orderBy: { createdAt: 'desc' },
+    })
+  );
+}
+
+export async function updateTravelLogArrival(id) {
+  await prisma.caseTravelLog.update({
+    where: { id },
+    data: { arrivalTime: new Date() },
+  });
+}
+
+/** Erros de rota: viagens para destino errado ou falhas de percurso. */
+const ROUTE_ERROR_REASONS = ['Rota incorreta', 'Falha aleatória de viagem'];
+
+export async function countRouteErrors(caseId) {
+  return prisma.caseTravelLog.count({
+    where: { activeCaseId: caseId, success: false, reason: { in: ROUTE_ERROR_REASONS } },
+  });
 }

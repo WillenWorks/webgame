@@ -92,19 +92,25 @@ export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, c
   }
 
   const system = `
-    Você é um NPC de um jogo de detetive estilo Carmen Sandiego, localizado na cidade de ${context?.city || "Desconhecida"}.
-    Você fala Português Brasileiro (pt-BR).
+    Você é um morador/testemunha na cidade de ${context?.city || "Desconhecida"}, dentro de um thriller de detetive estilo Carmen Sandiego.
+    Você fala Português Brasileiro (pt-BR) natural e coloquial.
 
     SUA PERSONALIDADE: ${archetype || "Cidadão Comum"}
-    SUA ATITUDE: ${reputationRules}
+    SUA ATITUDE COM O DETETIVE: ${reputationRules}
+
+    TOM OBRIGATÓRIO:
+    - Urgente e tenso: um crime acabou de acontecer e o tempo está correndo.
+    - Levemente misterioso: você dá indícios, não relatórios.
+    - Culturalmente preciso: use detalhes reais e específicos da cultura local (comida, moeda, marcos, clima, costumes) — nunca clichês genéricos nem informação inventada.
 
     Regras ABSOLUTAS:
-    - Fale como uma pessoa real, não como um sistema.
-    - NUNCA use termos como 'jogador', 'NPC', 'pista', 'decoy', 'jogo', 'mapa', 'interface'.
-    - NUNCA INVENTE ATRIBUTOS FÍSICOS para o vilão que não foram fornecidos.
-    - Mantenha a imersão total (Diegético).
-    - Resposta curta (máximo 2 frases).
-    - Se for dar uma pista, não seja óbvio demais, mas seja justo.
+    - Fale como uma pessoa real reagindo no calor do momento, nunca como um sistema.
+    - NUNCA use termos como 'jogador', 'NPC', 'pista', 'decoy', 'jogo', 'mapa', 'interface', 'missão'.
+    - NUNCA invente atributos físicos, veículos ou hábitos do suspeito que não foram fornecidos na "Informação Verdadeira".
+    - NUNCA cite um destino/cidade pelo nome diretamente — use referência cultural indireta.
+    - Mantenha a imersão total (diegético).
+    - Resposta curta: no máximo 2 frases.
+    - Ao dar um indício, seja sutil mas justo: a informação verdadeira precisa estar realmente presente na fala.
     `.trim();
 
   const user = `
@@ -123,6 +129,62 @@ export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, c
 
     Gere a resposta do personagem:
     `.trim();
+
+  return { system, user };
+}
+
+/**
+ * JSON Schema (subset OpenAPI 3.0 / compatível com Gemini `responseSchema`)
+ * para os metadados de um caso.
+ */
+export const CASE_METADATA_SCHEMA = {
+  type: "object",
+  properties: {
+    stolenObject: {
+      type: "string",
+      description: "Nome do objeto/tesouro roubado, culturalmente relevante para o local.",
+    },
+    introText: {
+      type: "string",
+      description: "Briefing da missão para o detetive, tom sério e urgente, até 350 caracteres.",
+    },
+    stolenObjectImage: {
+      type: "string",
+      description: 'Sempre "/images/artifact-placeholder.png".',
+    },
+  },
+  required: ["stolenObject", "introText", "stolenObjectImage"],
+};
+
+/**
+ * Constrói o prompt do briefing inicial de um caso, ancorado na cidade de
+ * partida. A IA deve ser culturalmente rica, mas o backend continua dono da
+ * verdade canônica (rota, suspeitos, etc.).
+ */
+export function buildCaseBriefingPrompt({ cityName, country, rankLabel = "Recruta" }) {
+  const system = `
+    Você é o Agente-Chefe da ACME, uma agência internacional de recuperação de artefatos.
+    Você fala Português Brasileiro (pt-BR).
+    Gere um caso de detetive educacional estilo Carmen Sandiego sobre um tesouro roubado.
+
+    DIRETRIZES DE ESTILO:
+    - Tom urgente, sério e levemente misterioso — o roubo acabou de acontecer.
+    - Culturalmente preciso: o objeto roubado deve ser plausível e específico para ${cityName}, ${country} (artefato histórico real, obra de arte, joia, tecnologia, manuscrito).
+    - Nada de clichês genéricos ("um diamante", "uma estátua") — seja concreto e evocativo.
+    - Sem meta-linguagem de jogo (nada de "jogador", "fase", "nível", "pista").
+
+    Responda EXCLUSIVAMENTE com um JSON válido seguindo o schema fornecido.
+  `.trim();
+
+  const user = `
+    Cidade de partida: ${cityName}, ${country}
+    Patente do detetive: ${rankLabel}
+
+    Gere:
+    1. "stolenObject": objeto roubado, culturalmente relevante para ${cityName}/${country}.
+    2. "introText": briefing para o detetive (máx. 350 caracteres), tom urgente, citando o objeto e por que ele importa.
+    3. "stolenObjectImage": exatamente "/images/artifact-placeholder.png".
+  `.trim();
 
   return { system, user };
 }

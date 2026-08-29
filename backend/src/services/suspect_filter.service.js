@@ -1,4 +1,5 @@
 import { filterSuspects } from '../repositories/suspect.repo.js';
+import { normalizeNotes } from '../domain/dossier.rules.js';
 import { z } from 'zod';
 
 const querySchema = z.object({
@@ -14,9 +15,7 @@ export async function filterSuspectsService(caseId, query) {
   if (!parsed.success) {
     throw new Error('Parâmetros inválidos');
   }
-  const filters = Object.fromEntries(
-    Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
-  );
+  const filters = normalizeNotes(parsed.data);
 
   const rows = await filterSuspects(caseId, filters);
   return rows;

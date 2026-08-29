@@ -69,10 +69,12 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useSfx } from '@/composables/useSfx'
 import RetroCard from '@/components/ui/RetroCard.vue'
 import RetroButton from '@/components/ui/RetroButton.vue'
 
 const { login, register } = useAuth()
+const sfx = useSfx()
 const router = useRouter()
 
 const isRegister = ref(false)
@@ -100,8 +102,10 @@ const handleLogin = async () => {
     }
     
     await login(form.value.username, form.value.password)
+    sfx.confirm()
     router.push('/dashboard')
   } catch (e) {
+    sfx.error()
     error.value = e.message || 'Falha na autenticação. Verifique suas credenciais.'
   } finally {
     loading.value = false

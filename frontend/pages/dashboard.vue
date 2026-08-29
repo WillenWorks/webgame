@@ -190,7 +190,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGame } from '~/composables/useGame'
-import { useApi } from '~/composables/useApi' // unused here but usually good practice
+import { useSfx } from '~/composables/useSfx'
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
 
@@ -214,6 +214,7 @@ const {
   isLoading 
 } = useGame()
 
+const sfx = useSfx()
 const router = useRouter()
 const newAgentName = ref('')
 const validating = ref(true)
@@ -254,6 +255,7 @@ const handleCreateProfile = async () => {
 }
 
 const createNewCase = async (difficulty) => {
+  sfx.beep()
   isCreatingCase.value = true
   const messages = [
       "Decodificando chaves de acesso...",
@@ -273,12 +275,14 @@ const createNewCase = async (difficulty) => {
     const newCase = await startCase(difficulty)
     if (newCase && newCase?.case?.id) {
         clearInterval(msgInterval)
+        sfx.confirm()
         loadingMessage.value = "CASO GERADO. INICIANDO..."
         await new Promise(r => setTimeout(r, 500))
         router.push(`/cases/${newCase?.case?.id}/briefing`)
     }
   } catch (e) {
     clearInterval(msgInterval)
+    sfx.error()
     alert('Erro ao criar missão: ' + e.message)
     isCreatingCase.value = false
     // Se falhar porque já existe, recarregar para atualizar a tela

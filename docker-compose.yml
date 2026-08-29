@@ -1,0 +1,35 @@
+# Operação Mundo — Infraestrutura de Banco de Dados
+# Sobe um PostgreSQL 16 (Alpine) pronto para o Prisma ORM do backend.
+#
+#   docker compose up -d          # sobe o banco em background
+#   docker compose logs -f postgres
+#   docker compose down           # para o banco (mantém o volume)
+#   docker compose down -v        # para o banco e APAGA os dados
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: operacao-mundo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mundo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mundo_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-operacao_mundo}
+      # Locale/encoding coerentes para conteúdo pt-BR (acentuação em cidades/pistas)
+      LANG: C.UTF-8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      # Host 5433 (5432 costuma estar ocupada por outro Postgres local).
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mundo} -d ${POSTGRES_DB:-operacao_mundo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata:
+    name: operacao-mundo-pgdata

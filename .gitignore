@@ -69,3 +69,8 @@ logs/
 # Arquivos de upload temporário (se houver)
 uploads/
 temp/
+
+# Relatórios do runner E2E (gerados em teste)
+backend/runner_report_*.json
+backend/.output/
+frontend/.output/

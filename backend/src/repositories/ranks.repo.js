@@ -1,51 +1,45 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
+
+const num = (v) => (v == null ? v : Number(v));
+
+function toRank(r) {
+  if (!r) return null;
+  return {
+    id: r.id,
+    title: r.title,
+    min_xp: num(r.minXp),
+    max_xp: num(r.maxXp),
+    mission_select_unlocked: r.missionSelectUnlocked,
+    difficulty_modifier: num(r.difficultyModifier),
+  };
+}
 
 export async function getAllRanks() {
-  const sql = `SELECT id, title, min_xp, mission_select_unlocked, difficulty_modifier FROM ranks ORDER BY id ASC`;
-  const [rows] = await pool.execute(sql);
-  return rows;
+  const rows = await prisma.rank.findMany({ orderBy: { id: 'asc' } });
+  return rows.map(toRank);
 }
 
 export async function getNextRank(currentRankId) {
-  const sql = `SELECT id, title, min_xp, mission_select_unlocked, difficulty_modifier FROM ranks WHERE id = ? + 1 LIMIT 1`;
-  const [rows] = await pool.execute(sql, [currentRankId]);
-  return rows[0] || null;
+  if (currentRankId == null) return null;
+  return toRank(
+    await prisma.rank.findUnique({ where: { id: Number(currentRankId) + 1 } })
+  );
 }
 
 export async function getRankByXp(xp) {
-  const sql = `SELECT id, title, min_xp, mission_select_unlocked, difficulty_modifier FROM ranks ORDER BY min_xp ASC`;
-  const [rows] = await pool.execute(sql);
+  const rows = await prisma.rank.findMany({ orderBy: { minXp: 'asc' } });
   let chosen = rows[0];
   for (const r of rows) {
-    if (xp >= r.min_xp) chosen = r; else break;
+    if (xp >= r.minXp) chosen = r;
+    else break;
   }
-  return chosen;
+  return toRank(chosen);
 }
 
+/**
+ * Patentes são semeadas por `prisma db seed`. Mantida por compatibilidade
+ * com o startup e com o profile.service.
+ */
 export async function ensureDefaultRanks() {
-  try {
-    await pool.execute(`
-      CREATE TABLE IF NOT EXISTS ranks (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        title VARCHAR(64) NOT NULL,
-        min_xp INT NOT NULL DEFAULT 0,
-        mission_select_unlocked TINYINT(1) NOT NULL DEFAULT 0,
-        difficulty_modifier DECIMAL(4,2) NOT NULL DEFAULT 1.00
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    `);
-    const [rows] = await pool.execute('SELECT COUNT(*) AS cnt FROM ranks');
-    const cnt = rows[0]?.cnt || 0;
-    if (cnt === 0) {
-      await pool.execute(
-        `INSERT INTO ranks (title, min_xp, mission_select_unlocked, difficulty_modifier) VALUES
-         ('Detetive Júnior', 0, 0, 1.00),
-         ('Detetive Pleno', 1000, 0, 1.10),
-         ('Detetive Sênior', 5000, 1, 1.20),
-         ('Investigador Mestre', 15000, 1, 1.35),
-         ('Grão-Detetive', 40000, 1, 1.50)`
-      );
-    }
-  } catch (e) {
-    console.warn('ensureDefaultRanks falhou:', String(e));
-  }
+  /* no-op: patentes gerenciadas pelo seed do Prisma */
 }

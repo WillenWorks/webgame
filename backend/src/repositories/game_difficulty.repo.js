@@ -1,9 +1,11 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
 
 export async function getGameDifficultyByCode(code) {
-  const [rows] = await pool.query(
-    'SELECT code, max_fails_allowed, visits_buffer FROM game_difficulty WHERE code = ? LIMIT 1',
-    [code]
-  );
-  return rows[0] || null;
+  const d = await prisma.gameDifficulty.findUnique({ where: { code } });
+  if (!d) return null;
+  return {
+    code: d.code,
+    max_fails_allowed: d.maxFailsAllowed,
+    visits_buffer: d.visitsBuffer,
+  };
 }

@@ -283,8 +283,11 @@
 import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useGame } from '@/composables/useGame'
+import { useSfx } from '@/composables/useSfx'
 import RetroCard from '@/components/ui/RetroCard.vue'
 import RetroButton from '@/components/ui/RetroButton.vue'
+
+const sfx = useSfx()
 
 const MAP_WIDTH = 1376
 const MAP_HEIGHT = 768
@@ -429,9 +432,7 @@ function handleWheel(e: WheelEvent) {
 }
 
 function selectDestination(city: any) {
-  if (selectedDestination.value?.id === city.id) {
-    // Toggle off? No, standard behavior is keep selected
-  }
+  if (selectedDestination.value?.id !== city.id) sfx.blip()
   selectedDestination.value = city
 }
 
@@ -443,21 +444,27 @@ function cancelTravel() {
 function confirmTravel() {
   if (!selectedDestination.value) return
   isTraveling.value = true
+  sfx.travel()
 
   const animationDuration = 2000
   const travelPromise = travelToCity(caseId, selectedDestination.value.id)
   const animationPromise = new Promise(resolve => setTimeout(resolve, animationDuration))
 
   Promise.all([travelPromise, animationPromise])
-    .then(([res]) => {
+    .then(([res]: any[]) => {
       if (res?.gameOver || lastGameOver.value) {
-        const status = lastGameOver.value === "WIN" ? "SOLVED" : "FAILED";
-        router.push(`/cases/${caseId}/debriefing?status=${status}`)
+        const solved = res?.solved ?? (lastGameOver.value === "WIN")
+        const status = solved ? "SOLVED" : "FAILED"
+        router.push({
+          path: `/cases/${caseId}/debriefing`,
+          query: { status, msg: res?.message || res?.text || '' }
+        })
         return
       }
       router.push(`/cases/${caseId}/city`)
     })
     .catch(err => {
+      sfx.error()
       alert('Erro na viagem: ' + (err.message || 'Falha desconhecida'))
       isTraveling.value = false
       showTravelConfirm.value = false
@@ -532,17 +539,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.bg-scanlines {
-  background: linear-gradient(
-    to bottom,
-    rgba(255,255,255,0),
-    rgba(255,255,255,0) 50%,
-    rgba(0,0,0,0.2) 50%,
-    rgba(0,0,0,0.2)
-  );
-  background-size: 100% 4px;
-}
-
 .retro-btn-icon {
   @apply w-10 h-10 flex items-center justify-center bg-slate-900 border border-cyan-500 text-cyan-400 font-mono hover:bg-cyan-500 hover:text-black transition-colors active:scale-95 shadow-lg text-lg;
 }

@@ -1,119 +1,109 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
+import { notesToPrismaWhere } from '../domain/dossier.rules.js';
+
+const ATTR_INCLUDE = {
+  sex: true,
+  hair: true,
+  hobby: true,
+  vehicle: true,
+  feature: true,
+};
+
+// { id, name, sex, hair, hobby, vehicle, feature, is_culprit }
+function toSuspectNamed(s) {
+  return {
+    id: s.id,
+    name: s.name,
+    sex: s.sex.name,
+    hair: s.hair.name,
+    hobby: s.hobby.name,
+    vehicle: s.vehicle.name,
+    feature: s.feature.name,
+    is_culprit: s.isCulprit,
+  };
+}
 
 export async function insertSuspect(suspect) {
-  const sql = `
-    INSERT INTO case_suspect_pool  (
-      id,
-      case_id,
-      name,
-      sex_id,
-      hair_id,
-      hobby_id,
-      vehicle_id,
-      feature_id,
-      is_culprit
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  const values = [
-    suspect.id,
-    suspect.case_id,
-    suspect.name,
-    suspect.sex_id,
-    suspect.hair_id,
-    suspect.hobby_id,
-    suspect.vehicle_id,
-    suspect.feature_id,
-    suspect.is_culprit
-  ];
-
-  await pool.execute(sql, values);
+  await prisma.caseSuspect.create({
+    data: {
+      id: suspect.id,
+      caseId: suspect.case_id,
+      name: suspect.name,
+      sexId: Number(suspect.sex_id),
+      hairId: Number(suspect.hair_id),
+      hobbyId: Number(suspect.hobby_id),
+      vehicleId: Number(suspect.vehicle_id),
+      featureId: Number(suspect.feature_id),
+      isCulprit: Boolean(suspect.is_culprit),
+    },
+  });
 }
 
 export async function getSuspectsByCase(caseId) {
-  const sql = `
-    SELECT
-      s.id,
-      s.name,
-      sx.name AS sex,
-      h.name AS hair,
-      hb.name AS hobby,
-      v.name AS vehicle,
-      f.name AS feature,
-      s.is_culprit
-    FROM case_suspect_pool s
-    JOIN attr_sex sx ON sx.id = s.sex_id
-    JOIN attr_hair h ON h.id = s.hair_id
-    JOIN attr_hobby hb ON hb.id = s.hobby_id
-    JOIN attr_vehicle v ON v.id = s.vehicle_id
-    JOIN attr_feature f ON f.id = s.feature_id
-    WHERE s.case_id = ?
-  `;
-  const [rows] = await pool.execute(sql, [caseId]);
-  return rows;
+  const rows = await prisma.caseSuspect.findMany({
+    where: { caseId },
+    include: ATTR_INCLUDE,
+  });
+  return rows.map(toSuspectNamed);
 }
 
 export async function getCulpritByCase(caseId) {
-  const sql = `
-    SELECT
-      s.id,
-      s.name,
-      s.sex_id,
-      sx.name AS sex,
-      s.hair_id,
-      h.name AS hair,
-      s.hobby_id,
-      hb.name AS hobby,
-      s.vehicle_id,
-      v.name AS vehicle,
-      s.feature_id,
-      f.name AS feature
-    FROM case_suspect_pool s
-    JOIN attr_sex sx ON sx.id = s.sex_id
-    JOIN attr_hair h ON h.id = s.hair_id
-    JOIN attr_hobby hb ON hb.id = s.hobby_id
-    JOIN attr_vehicle v ON v.id = s.vehicle_id
-    JOIN attr_feature f ON f.id = s.feature_id
-    WHERE s.case_id = ?
-      AND s.is_culprit = 1
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId]);
-  return rows[0];
+  const s = await prisma.caseSuspect.findFirst({
+    where: { caseId, isCulprit: true },
+    include: ATTR_INCLUDE,
+  });
+  if (!s) return undefined;
+  return {
+    id: s.id,
+    name: s.name,
+    sex_id: s.sexId,
+    sex: s.sex.name,
+    hair_id: s.hairId,
+    hair: s.hair.name,
+    hobby_id: s.hobbyId,
+    hobby: s.hobby.name,
+    vehicle_id: s.vehicleId,
+    vehicle: s.vehicle.name,
+    feature_id: s.featureId,
+    feature: s.feature.name,
+  };
 }
 
-
 export async function filterSuspects(caseId, filters) {
-  const clauses = ['s.case_id = ?'];
-  const params = [caseId];
+  const where = { caseId, ...notesToPrismaWhere(filters) };
+  const rows = await prisma.caseSuspect.findMany({ where, include: ATTR_INCLUDE });
+  return rows.map(toSuspectNamed);
+}
 
-  if (filters.sex_id) { clauses.push('s.sex_id = ?'); params.push(filters.sex_id); }
-  if (filters.hair_id) { clauses.push('s.hair_id = ?'); params.push(filters.hair_id); }
-  if (filters.hobby_id) { clauses.push('s.hobby_id = ?'); params.push(filters.hobby_id); }
-  if (filters.vehicle_id) { clauses.push('s.vehicle_id = ?'); params.push(filters.vehicle_id); }
-  if (filters.feature_id) { clauses.push('s.feature_id = ?'); params.push(filters.feature_id); }
-
-  const where = clauses.join(' AND ');
-  // Updated to include JOINs so we get text descriptions (needed for frontend and image gen)
-  const sql = `
-    SELECT
-      s.id,
-      s.name,
-      sx.name AS sex,
-      h.name AS hair,
-      hb.name AS hobby,
-      v.name AS vehicle,
-      f.name AS feature,
-      s.is_culprit
-    FROM case_suspect_pool s
-    JOIN attr_sex sx ON sx.id = s.sex_id
-    JOIN attr_hair h ON h.id = s.hair_id
-    JOIN attr_hobby hb ON hb.id = s.hobby_id
-    JOIN attr_vehicle v ON v.id = s.vehicle_id
-    JOIN attr_feature f ON f.id = s.feature_id
-    WHERE ${where}
-  `;
-
-  const [rows] = await pool.execute(sql, params);
-  return rows;
+/**
+ * Valores distintos de cada atributo presentes na pool de suspeitos do caso.
+ * É a fonte da verdade para os selects do dossiê no frontend (nunca hardcoded).
+ */
+export async function getCaseAttributeOptions(caseId) {
+  const rows = await prisma.caseSuspect.findMany({ where: { caseId }, include: ATTR_INCLUDE });
+  const groups = {
+    sex_id: new Map(),
+    hair_id: new Map(),
+    hobby_id: new Map(),
+    vehicle_id: new Map(),
+    feature_id: new Map(),
+  };
+  for (const s of rows) {
+    groups.sex_id.set(s.sexId, s.sex.name);
+    groups.hair_id.set(s.hairId, s.hair.name);
+    groups.hobby_id.set(s.hobbyId, s.hobby.name);
+    groups.vehicle_id.set(s.vehicleId, s.vehicle.name);
+    groups.feature_id.set(s.featureId, s.feature.name);
+  }
+  const toList = (m) =>
+    [...m.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  return {
+    sex_id: toList(groups.sex_id),
+    hair_id: toList(groups.hair_id),
+    hobby_id: toList(groups.hobby_id),
+    vehicle_id: toList(groups.vehicle_id),
+    feature_id: toList(groups.feature_id),
+  };
 }

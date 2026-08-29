@@ -1,117 +1,104 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
+
+const int = (v) => (v == null ? v : Number(v));
 
 /**
  * Retorna a cidade "atual" do caso considerando a visão persistida por fase.
- * Lógica:
- * 1) Determina o step atual: primeiro registro em case_route com visited = FALSE
- * 2) Verifica se existe uma visão salva em case_current_view para (case_id, step_order)
- *    - Se existir, retorna essa cidade (com city_name/country_name) como a "atual" para exibição
- * 3) Caso contrário, retorna a cidade do step atual a partir de case_route (com city_name/country_name)
+ * 1) step atual: primeiro registro em case_route com visited = false
+ * 2) se existir visão salva em case_current_view para (case_id, step_order), usa a cidade dela
+ * 3) caso contrário, usa a cidade do step atual
  */
 export async function getCurrentCityByCase(caseId) {
-  // 1) Step atual pela rota
-  const [stepRows] = await pool.execute(
-    `SELECT cr.step_order, cr.city_id
-     FROM case_route cr
-     WHERE cr.active_case_id = ? AND cr.visited = FALSE
-     ORDER BY cr.step_order ASC
-     LIMIT 1`,
-    [caseId]
-  );
-  const step = stepRows[0];
+  const step = await prisma.caseRoute.findFirst({
+    where: { activeCaseId: caseId, visited: false },
+    orderBy: { stepOrder: 'asc' },
+  });
   if (!step) return null;
 
-  // 2) Tenta visão persistida para este step
-  const [viewRows] = await pool.execute(
-    `SELECT cv.city_id
-     FROM case_current_view cv
-     WHERE cv.case_id = ? AND cv.step_order = ?
-     LIMIT 1`,
-    [caseId, step.step_order]
-  );
-  const view = viewRows[0];
-  const cityId = view?.city_id || step.city_id;
+  const view = await prisma.caseCurrentView.findFirst({
+    where: { caseId, stepOrder: step.stepOrder },
+  });
 
-  // 3) Retorna cidade com nomes e coordenadas extraídas
-  const [cityRows] = await pool.execute(
-    `SELECT ? AS step_order, 
-            c.id AS city_id, 
-            c.name AS city_name, 
-            ST_Y(c.geo_coordinates) AS lat, 
-            ST_X(c.geo_coordinates) AS lon, 
-            co.name AS country_name, 
-            c.description_prompt as description_prompt, 
-            c.image_url as image_url
-     FROM cities c
-     JOIN countries co ON co.id = c.country_id
-     WHERE c.id = ?
-     LIMIT 1`,
-    [step.step_order, cityId]
-  );
-  return cityRows[0] || null;
+  const cityId = view?.cityId ?? step.cityId;
+
+  const city = await prisma.city.findUnique({
+    where: { id: cityId },
+    include: { country: true },
+  });
+  if (!city) return null;
+
+  return {
+    step_order: step.stepOrder,
+    city_id: city.id,
+    city_name: city.name,
+    lat: city.latitude,
+    lon: city.longitude,
+    country_name: city.country.name,
+    description_prompt: city.descriptionPrompt,
+    image_url: city.imageUrl,
+  };
 }
 
 export async function getCityPlaces(caseId, cityId) {
-  const sql = `
-    SELECT
-      cp.id,
-      pt.id AS place_type_id,
-      pt.name,
-      pt.interaction_style,
-      cp.clue_type
-    FROM case_city_places cp
-    JOIN place_types pt ON pt.id = cp.place_type_id
-    WHERE cp.case_id = ?
-      AND cp.city_id = ?
-  `;
-  const [rows] = await pool.execute(sql, [caseId, cityId]);
-  return rows;
+  const rows = await prisma.caseCityPlace.findMany({
+    where: { caseId, cityId: int(cityId) },
+    include: { placeType: true },
+  });
+  return rows.map((cp) => ({
+    id: cp.id,
+    place_type_id: cp.placeTypeId,
+    name: cp.placeType.name,
+    interaction_style: cp.placeType.interactionStyle,
+    clue_type: cp.clueType,
+  }));
 }
 
 export async function getCityPlaceById(caseId, cityPlaceId) {
-  const sql = `
-    SELECT
-      cp.id,
-      cp.city_id,
-      cp.place_type_id,
-      cp.clue_type,
-      cp.is_capture_location,
-      pt.name,
-      pt.interaction_style
-    FROM case_city_places cp
-    JOIN place_types pt ON pt.id = cp.place_type_id
-    WHERE cp.case_id = ?
-      AND cp.id = ?
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, cityPlaceId]);
-  return rows[0];
+  const cp = await prisma.caseCityPlace.findFirst({
+    where: { id: cityPlaceId, caseId },
+    include: { placeType: true },
+  });
+  if (!cp) return undefined;
+  return {
+    id: cp.id,
+    city_id: cp.cityId,
+    place_type_id: cp.placeTypeId,
+    clue_type: cp.clueType,
+    is_capture_location: cp.isCaptureLocation,
+    name: cp.placeType.name,
+    interaction_style: cp.placeType.interactionStyle,
+  };
 }
 
 export async function insertCityPlace({ id, caseId, cityId, placeTypeId, clueType }) {
-  const sql = `
-    INSERT INTO case_city_places
-      (id, case_id, city_id, place_type_id, clue_type)
-    VALUES (?, ?, ?, ?, ?)
-  `;
-  await pool.execute(sql, [id, caseId, cityId, placeTypeId, clueType]);
+  await prisma.caseCityPlace.create({
+    data: {
+      id,
+      caseId,
+      cityId: int(cityId),
+      placeTypeId: int(placeTypeId),
+      clueType,
+    },
+  });
 }
 
 export async function getAllPlaceTypes() {
-  const sql = `
-    SELECT id, name, interaction_style
-    FROM place_types
-    ORDER BY RAND()
-  `;
-  const [rows] = await pool.execute(sql);
-  return rows;
+  const rows = await prisma.placeType.findMany();
+  // Ordem aleatória (equivalente ao antigo ORDER BY RAND())
+  for (let i = rows.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rows[i], rows[j]] = [rows[j], rows[i]];
+  }
+  return rows.map((pt) => ({
+    id: pt.id,
+    name: pt.name,
+    interaction_style: pt.interactionStyle,
+  }));
 }
 
 export async function setCaptureFlag(cityPlaceId, isCapture = 1) {
-  const sql = `
-    UPDATE case_city_places
-    SET is_capture_location = ?
-    WHERE id = ?
-  `;
-  await pool.execute(sql, [isCapture ? 1 : 0, cityPlaceId]);
+  await prisma.caseCityPlace.update({
+    where: { id: cityPlaceId },
+    data: { isCaptureLocation: Boolean(isCapture) },
+  });
 }

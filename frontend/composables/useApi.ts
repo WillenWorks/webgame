@@ -2,58 +2,96 @@
 // @ts-ignore
 import { useRuntimeConfig, useCookie } from '#app'
 
+/**
+ * Cliente HTTP central do terminal.
+ * - Injeta o accessToken (cookie `auth_token`) em toda requisição.
+ * - Silent refresh: em caso de 401, tenta renovar via `POST /auth/refresh`
+ *   usando o `refreshToken` guardado no cookie `auth_refresh` e repete a
+ *   requisição original uma única vez. Se falhar, encerra a sessão e
+ *   redireciona para /login.
+ */
 export const useApi = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:3333/api/v1'
-  
-  // Use 'watch: true' to ensure reactivity across the app
+
   const token = useCookie('auth_token', {
     watch: true,
     default: () => null,
+    maxAge: 60 * 60 * 24 * 7,
     path: '/'
   })
 
+  const refreshToken = useCookie('auth_refresh', {
+    watch: true,
+    default: () => null,
+    maxAge: 60 * 60 * 24 * 30,
+    path: '/'
+  })
+
+  // Garante uma única chamada de refresh concorrente
+  let refreshInFlight: Promise<boolean> | null = null
+
+  const runRefresh = (): Promise<boolean> => {
+    if (!refreshToken.value) return Promise.resolve(false)
+    if (!refreshInFlight) {
+      refreshInFlight = $fetch<{ ok: boolean; accessToken?: string }>(`${baseURL}/auth/refresh`, {
+        method: 'POST',
+        body: { refreshToken: refreshToken.value }
+      })
+        .then((res) => {
+          if (res?.accessToken) {
+            token.value = res.accessToken
+            return true
+          }
+          return false
+        })
+        .catch(() => false)
+        .finally(() => { refreshInFlight = null })
+    }
+    return refreshInFlight
+  }
+
+  const endSession = () => {
+    token.value = null
+    refreshToken.value = null
+    if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+      window.location.href = '/login'
+    }
+  }
+
   // @ts-ignore
-  return $fetch.create({
+  const client = $fetch.create({
     baseURL,
     onRequest({ options }) {
-      const tokenValue = token.value
-
-      // Initialize headers
-      options.headers = options.headers || {}
-      
-      if (tokenValue) {
-        // Ensure we don't double-prefix Bearer
-        const authHeader = tokenValue.startsWith('Bearer ') 
-          ? tokenValue 
-          : `Bearer ${tokenValue}`
-          
-        // Handle different header formats (Headers object vs plain object)
-        if (options.headers instanceof Headers) {
-          options.headers.set('Authorization', authHeader)
-        } else {
-          // @ts-ignore
-          options.headers['Authorization'] = authHeader
-        }
-        
-        console.log('[useApi] Setting Auth Header:', authHeader.substring(0, 15) + '...')
-      } else {
-        console.warn('[useApi] No token found in cookie during request')
+      const headers = new Headers(options.headers as HeadersInit | undefined)
+      const value = token.value
+      if (value) {
+        headers.set('Authorization', value.startsWith('Bearer ') ? value : `Bearer ${value}`)
       }
-      
-      console.log(`[API] ${options.method || 'GET'} ${options.url}`)
-    },
-    async onResponseError({ response }) {
-      console.error('API Error:', response.status, response._data?.message || response.statusText)
-      
-      if (response.status === 401) {
-        console.warn('[useApi] 401 Unauthorized - Clearing token and redirecting')
-        if (token.value) token.value = null
-        
-        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-          window.location.href = '/login'
-        }
-      }
+      options.headers = headers
     }
   })
+
+  const isAuthEndpoint = (request: unknown) =>
+    typeof request === 'string' && /\/auth\/(login|register|refresh|revoke)/.test(request)
+
+  const api = async <T = any>(request: any, options: any = {}, allowRetry = true): Promise<T> => {
+    try {
+      return await client<T>(request, options)
+    } catch (err: any) {
+      const status = err?.response?.status ?? err?.status
+
+      if (status === 401 && allowRetry && !isAuthEndpoint(request)) {
+        const renewed = await runRefresh()
+        if (renewed) {
+          return api<T>(request, options, false)
+        }
+        endSession()
+      }
+
+      throw err
+    }
+  }
+
+  return api
 }

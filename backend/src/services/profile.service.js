@@ -101,8 +101,8 @@ export async function applyCaseResultToProfile(profileId, result) {
   await ensureDefaultRanks();
   const rank = await getRankByXp(newXp);
   if (rank && rank.id !== profile.rank_id) {
-    const { default: pool } = await import('../config/database.js');
-    await pool.execute('UPDATE profiles SET rank_id = ? WHERE id = ?', [rank.id, profileId]);
+    const { updateProfileRank } = await import('../repositories/profile.repo.js');
+    await updateProfileRank(profileId, rank.id);
   }
 
   return { xp: newXp, reputation_score: newRep, cases_solved: newSolved, cases_failed: newFailed, rank_id: rank?.id ?? profile.rank_id };

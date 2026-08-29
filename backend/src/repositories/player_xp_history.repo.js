@@ -1,9 +1,15 @@
-import pool from '../config/database.js';
+import { randomUUID } from 'crypto';
+import prisma from '../config/prisma.js';
 
 export async function insertXpHistory({ playerId, caseId, xpAwarded, breakdown }) {
-  const [result] = await pool.query(
-    'INSERT INTO player_xp_history (id, profile_id, case_id, xp_awarded, breakdown_json) VALUES (UUID(), ?, ?, ?, ?)',
-    [playerId, caseId, xpAwarded, JSON.stringify(breakdown || {})]
-  );
-  return result?.affectedRows > 0;
+  await prisma.playerXpHistory.create({
+    data: {
+      id: randomUUID(),
+      profileId: playerId,
+      caseId,
+      xpAwarded,
+      breakdownJson: breakdown || {},
+    },
+  });
+  return true;
 }

@@ -157,12 +157,14 @@ import { useRouter, useRoute } from 'vue-router'
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
 import { useGame } from '~/composables/useGame'
+import { useSfx } from '~/composables/useSfx'
 
 const route = useRoute()
 const router = useRouter()
 const caseId = route.params.id
 
 const { visitCurrentCity, investigatePlace, isLoading } = useGame()
+const sfx = useSfx()
 
 const cityData = ref(null)
 const currentCity = ref(null)
@@ -236,33 +238,54 @@ const handleImgError = (e) => {
 }
 
 const confirmInvestigate = (place) => {
+  sfx.blip()
   selectedPlace.value = place
 }
 
 const executeInvestigate = async () => {
   if (!selectedPlace.value) return
-  
+
   investigating.value = true
   const place = selectedPlace.value
-  
+
   await new Promise(r => setTimeout(r, 1500))
 
   try {
     const res = await investigatePlace(caseId, place.id)
-    if (res.ok) {
+
+    // Desfecho do caso (captura correta/errada ou tempo esgotado)
+    if (res.gameOver) {
+      const status = res.solved ? 'SOLVED' : 'FAILED'
+      res.solved ? sfx.confirm() : sfx.error()
+      router.push({
+        path: `/cases/${caseId}/debriefing`,
+        query: {
+          status,
+          xp: res.xpEarned ?? 0,
+          rep: res.repDelta ?? 0,
+          msg: res.text || ''
+        }
+      })
+      return
+    }
+
+    if (res.ok !== false) {
+      sfx.beep()
       router.push({
         path: `/cases/${caseId}/place/${place.id}`,
-        state: { 
-           placeName: place.name,
-           dialogue: res.text
+        state: {
+          placeName: place.name,
+          dialogue: res.text
         }
       })
     } else {
+      sfx.error()
       alert('Investigação falhou: ' + (res.message || 'Erro desconhecido'))
       selectedPlace.value = null
     }
   } catch (e) {
     console.error(e)
+    sfx.error()
     alert('Erro de conexão.')
   } finally {
     investigating.value = false

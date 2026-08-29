@@ -60,7 +60,7 @@
             </div>
             
             <p class="font-mono text-lg text-white leading-relaxed uppercase typing-effect">
-              "{{ cleanDialogue }}"
+              "<TypewriterText :text="cleanDialogue" :speed="24" sound />"
             </p>
             
             <div class="mt-auto pt-4 flex justify-end">
@@ -82,6 +82,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useGame } from '~/composables/useGame'
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
+import TypewriterText from '~/components/ui/TypewriterText.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -101,22 +102,24 @@ const npcImage = ref(null)
 
 // Robust cleaning logic in case useGame.ts fix wasn't enough or for existing state
 const cleanDialogue = computed(() => {
-  if (!rawDialogue.value) return "..."
-  
   let text = rawDialogue.value
-  
-  // Try to parse if it looks like JSON (Secondary check for robustness)
+  if (!text) return "..."
+
+  // O composable já normaliza para string, mas mantemos tolerância a formatos antigos
+  if (typeof text === 'object') {
+    text = text.text || text.TEXT || ''
+  }
+
   if (typeof text === 'string' && text.trim().startsWith('{')) {
     try {
       const parsed = JSON.parse(text)
       text = parsed.TEXT || parsed.text || text
     } catch (e) {
-      console.warn("Failed to parse dialogue JSON in Component", e)
+      console.warn("Falha ao interpretar diálogo JSON", e)
     }
   }
 
-  // Formatting cleanup
-  return text.text // Remove wrapping quotes if any
+  return String(text).replace(/^["']+|["']+$/g, '').trim() || "..."
 })
 
 const leavePlace = () => {
@@ -146,17 +149,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.bg-scanlines {
-  background: linear-gradient(
-    to bottom,
-    rgba(255,255,255,0),
-    rgba(255,255,255,0) 50%,
-    rgba(0,0,0,0.2) 50%,
-    rgba(0,0,0,0.2)
-  );
-  background-size: 100% 4px;
-}
-
 .typing-effect {
   animation: fadeIn 0.5s ease-out;
 }

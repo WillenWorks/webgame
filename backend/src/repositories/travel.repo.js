@@ -1,35 +1,32 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
+
+const int = (v) => (v == null ? v : Number(v));
 
 export async function countLocationClues(caseId, cityId) {
-  const sql = `
-    SELECT COUNT(*) AS total
-    FROM case_clues cc
-    JOIN case_city_places cp ON cp.id = cc.city_place_id
-    WHERE cc.case_id = ?
-      AND cp.city_id = ?
-      AND cc.clue_type = 'NEXT_LOCATION'
-  `;
-  const [[row]] = await pool.execute(sql, [caseId, cityId]);
-  return row.total;
+  return prisma.caseClue.count({
+    where: {
+      caseId,
+      clueType: 'NEXT_LOCATION',
+      cityPlace: { cityId: int(cityId) },
+    },
+  });
 }
 
 export async function getNextCityStep(caseId, currentStep) {
-  const sql = `
-    SELECT city_id
-    FROM case_route
-    WHERE active_case_id = ?
-      AND step_order = ?
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, currentStep + 1]);
-  return rows[0];
+  const row = await prisma.caseRoute.findUnique({
+    where: {
+      activeCaseId_stepOrder: { activeCaseId: caseId, stepOrder: int(currentStep) + 1 },
+    },
+  });
+  if (!row) return undefined;
+  return { city_id: row.cityId };
 }
 
-// Remover funções incompatíveis com o schema atual
+// Mantidas como no-op: progresso é rastreado por `visited` em case_route
 export async function updateCaseTime() {
-  return; // noop: active_cases não possui current_time_spent no dump atual
+  return;
 }
 
 export async function advanceCaseStep() {
-  return; // noop: usar visited em case_route para progresso
+  return;
 }

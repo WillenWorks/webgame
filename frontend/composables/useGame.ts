@@ -59,12 +59,14 @@ type Suspect = {
 
 type VisitCurrentCityResponse = {
   city: {
-    city_id: string;
+    city_id: number;
     city_name: string;
     country_name: string;
-    geo_coordinates: { x: number; y: number };
+    lat: number;
+    lon: number;
     step_order: number;
-    imageUrl?: string;
+    description_prompt?: string;
+    image_url?: string;
   };
   travelOptions?: TravelOption[];
   timeState?: TimeState;
@@ -92,6 +94,57 @@ type RoutesResponse = {
 };
 
 /* =========================
+ *  HELPERS (contract adapters)
+ * ========================= */
+// Janela desperta usada pelo relógio do backend (08:00–23:00 => 15h/dia)
+const AWAKE_HOURS_PER_DAY = 15;
+
+/**
+ * Normaliza o `timeState` vindo do backend (`{ start_time, deadline_time,
+ * current_time, daysEarly }`) para o formato consumido pelo GameClock,
+ * derivando `days_remaining` / `hours_per_day` quando ausentes.
+ */
+function normalizeTimeState(ts: any): TimeState | null {
+  if (!ts) return null;
+  const current_time = ts.current_time ?? ts.currentTime ?? null;
+  const deadline_time = ts.deadline_time ?? ts.deadlineTime ?? null;
+
+  let days_remaining = ts.days_remaining;
+  if (days_remaining == null && current_time && deadline_time) {
+    const diffMs = new Date(deadline_time).getTime() - new Date(current_time).getTime();
+    days_remaining = Number.isFinite(diffMs) ? Math.max(0, Math.ceil(diffMs / 86_400_000)) : 0;
+  }
+
+  return {
+    current_time,
+    deadline_time,
+    hours_per_day: ts.hours_per_day ?? AWAKE_HOURS_PER_DAY,
+    days_remaining: days_remaining ?? 0,
+  };
+}
+
+/**
+ * Achata respostas de gameplay. O controller de investigação/finalização
+ * devolve `{ ok, text: { text, gameOver, solved, timeState, xpEarned, repDelta } }`
+ * (duplo embrulho) nos desfechos, e `{ ok, text: "<diálogo>" }` nas pistas comuns.
+ * Aqui devolvemos sempre `{ ...campos, text: string }`.
+ */
+function unwrapGameResponse(raw: any): GenericGameResponse {
+  if (!raw || typeof raw !== "object") return { ok: false, text: String(raw ?? "") };
+
+  const inner =
+    raw.text && typeof raw.text === "object" && !Array.isArray(raw.text) ? raw.text : null;
+
+  const flat: any = inner ? { ...raw, ...inner } : { ...raw };
+
+  if (inner && typeof inner.text === "string") flat.text = inner.text;
+  else if (typeof raw.text === "string") flat.text = raw.text;
+  else flat.text = typeof flat.text === "string" ? flat.text : "";
+
+  return flat as GenericGameResponse;
+}
+
+/* =========================
  *  STATE (Global)
  * ========================= */
 const profile = ref<Profile | null>(null);
@@ -111,11 +164,13 @@ export function useGame() {
    *  HELPER: SYNC TIME
    * ========================= */
   const syncGameState = (data: any) => {
-    if (data?.timeState) {
-      timeState.value = data.timeState;
-    }
-    if (data?.gameOver) {
-      lastGameOver.value = data.win ? "WIN" : "LOSE";
+    const ts = normalizeTimeState(data?.timeState);
+    if (ts) timeState.value = ts;
+
+    const isOver = data?.gameOver ?? data?.text?.gameOver ?? false;
+    if (isOver) {
+      const solved = data?.solved ?? data?.text?.solved ?? data?.win ?? false;
+      lastGameOver.value = solved ? "WIN" : "LOSE";
     }
   };
 
@@ -146,21 +201,23 @@ export function useGame() {
 
       if (data && data?.case?.id) {
         activeCase.value = data;
-        if (data.currentTime || data.current_time) {
-          timeState.value = {
-            current_time: data.currentTime || data.current_time,
-            deadline_time: data.deadlineTime || data.deadline_time,
-            hours_per_day: 16,
-            days_remaining: 7,
-          };
-        }
+        // Mantém `cases` como fonte única para app.vue / dossier.vue / briefing.vue
+        cases.value = [data.case];
+
+        const ts = normalizeTimeState(data.timeState);
+        if (ts) timeState.value = ts;
+
         return data;
       } else {
         activeCase.value = null;
+        cases.value = [];
+        timeState.value = null;
+        lastGameOver.value = null;
       }
     } catch (e) {
       console.error("[GAME] Erro ao buscar caso ativo", e);
       activeCase.value = null;
+      cases.value = [];
     } finally {
       isLoading.value = false;
     }
@@ -169,10 +226,11 @@ export function useGame() {
   // 3. Start New Case
   const startCase = async (difficulty: string) => {
     isProcessingCase.value = true;
+    lastGameOver.value = null; // limpa desfecho de um caso anterior
     try {
       const data = await fetchApi("/cases", {
         method: "POST",
-        body: JSON.stringify({ difficulty }),
+        body: { difficulty },
       });
       if (data && data?.case?.id) {
         activeCase.value = data;
@@ -211,10 +269,11 @@ export function useGame() {
   const travelToCity = async (caseId: string, cityId: string | number) => {
     isProcessingCase.value = true;
     try {
-      const res = await fetchApi<GenericGameResponse>(`/cases/${caseId}/travel`, {
+      const raw = await fetchApi(`/cases/${caseId}/travel`, {
         method: "POST",
         body: { cityId: Number(cityId) },
       });
+      const res = unwrapGameResponse(raw);
       syncGameState(res);
       return res;
     } catch (e) {
@@ -227,18 +286,32 @@ export function useGame() {
   // 6. Investigate Place
   const investigatePlace = async (caseId: string, placeId: string) => {
     try {
-      const data = await fetchApi<GenericGameResponse>(
+      const raw = await fetchApi(
         `/cases/${caseId}/investigate`,
         {
           method: "POST",
           body: { placeId },
         },
       );
+      const data = unwrapGameResponse(raw);
       syncGameState(data);
       return data;
     } catch (e) {
       console.error("[GAME] Erro ao investigar", e);
       throw e;
+    }
+  };
+
+  // 7a. Opções de atributo da pool de suspeitos deste caso (dirige os selects do dossiê)
+  const fetchCaseAttributes = async (caseId: string) => {
+    try {
+      const res = await fetchApi<{ ok: boolean; attributes: Record<string, Array<{ id: number; label: string }>> }>(
+        `/cases/${caseId}/suspects/attributes`,
+      );
+      return res?.attributes ?? {};
+    } catch (e) {
+      console.error("[GAME] Erro ao carregar atributos do caso", e);
+      return {};
     }
   };
 
@@ -272,13 +345,16 @@ export function useGame() {
     }
   };
 
-  // 9. Get Dossier Notes
+  // 9. Get Dossier Notes → devolve apenas o objeto de características anotadas
   const getDossierNotes = async (caseId: string) => {
     try {
-      return await fetchApi(`/cases/${caseId}/dossier/`);
+      const res = await fetchApi<{ ok: boolean; notes: any }>(
+        `/cases/${caseId}/dossier`,
+      );
+      return res?.notes ?? {};
     } catch (e) {
-      console.error(e);
-      return null;
+      console.error("[GAME] Erro ao carregar notas do dossiê", e);
+      return {};
     }
   };
 
@@ -361,8 +437,9 @@ export function useGame() {
       return [];
     }
   };
-  const refreshTimeState = (newState: TimeState) => {
-    if (newState) timeState.value = newState;
+  const refreshTimeState = (newState: any) => {
+    const ts = normalizeTimeState(newState);
+    if (ts) timeState.value = ts;
   };
 
   return {
@@ -383,6 +460,7 @@ export function useGame() {
     travelToCity,
     investigatePlace,
     filterSuspects,
+    fetchCaseAttributes,
     fetchRoutes,
     issueWarrant,
     getDossierNotes,

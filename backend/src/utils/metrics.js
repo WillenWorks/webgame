@@ -24,9 +24,28 @@ export const httpRequestDurationSeconds = new client.Histogram({
 export const aiRequestsTotal = new client.Counter({
   name: 'ai_requests_total',
   help: 'Total AI calls',
-  labelNames: ['result'], // success | fallback | error
+  labelNames: ['provider', 'result'], // result: success | fallback | error
   registers: [metricsRegistry],
 });
+
+export const aiRequestDurationSeconds = new client.Histogram({
+  name: 'ai_request_duration_seconds',
+  help: 'AI provider call latency in seconds',
+  labelNames: ['provider', 'result'], // result: success | error
+  buckets: [0.1, 0.25, 0.5, 0.8, 1, 2, 4, 8, 15],
+  registers: [metricsRegistry],
+});
+
+/**
+ * Registra o desfecho de uma chamada de IA nas métricas Prometheus.
+ * @param {{ provider?: string, result: 'success'|'fallback'|'error', seconds?: number }} params
+ */
+export function observeAiCall({ provider = 'unknown', result, seconds }) {
+  aiRequestsTotal.inc({ provider, result });
+  if (typeof seconds === 'number' && (result === 'success' || result === 'error')) {
+    aiRequestDurationSeconds.observe({ provider, result }, seconds);
+  }
+}
 
 // Helper to measure HTTP request duration
 export function startTimer() {

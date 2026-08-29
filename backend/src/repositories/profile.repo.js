@@ -1,119 +1,140 @@
-import pool from '../config/database.js';
+import { randomUUID } from 'crypto';
+import prisma from '../config/prisma.js';
+
+const num = (v) => (v == null ? v : Number(v));
+
+// Perfil "cru" (equivalente a SELECT p.* [+ r.title as rank_title])
+function toProfileRow(p) {
+  if (!p) return null;
+  const row = {
+    id: p.id,
+    user_id: p.userId,
+    detective_name: p.detectiveName,
+    rank_id: p.rankId,
+    xp: p.xp,
+    reputation_score: p.reputationScore,
+    cases_solved: p.casesSolved,
+    cases_failed: p.casesFailed,
+    created_at: p.createdAt,
+  };
+  if (p.rank !== undefined) {
+    row.rank_title = p.rank?.title ?? null;
+    row.rank_min_xp = p.rank ? num(p.rank.minXp) : null;
+    row.rank_max_xp = p.rank ? num(p.rank.maxXp) : null;
+  }
+  return row;
+}
 
 export async function createProfile({ id, userId, detectiveName }) {
-  const sql = `
-    INSERT INTO profiles (id, user_id, detective_name)
-    VALUES (?, ?, ?)
-  `;
   try {
-    await pool.execute(sql, [id, userId, detectiveName]);
+    await prisma.profile.create({
+      data: { id: id || randomUUID(), userId, detectiveName },
+    });
   } catch (err) {
-    if (err && err.code === 'ER_DUP_ENTRY') {
-      const [rows] = await pool.execute(
-        'SELECT * FROM profiles WHERE user_id = ? AND detective_name = ? LIMIT 1',
-        [userId, detectiveName]
+    if (err && err.code === 'P2002') {
+      return toProfileRow(
+        await prisma.profile.findUnique({ where: { detectiveName } })
       );
-      return rows[0] || null;
     }
     throw err;
   }
 }
 
 export async function findProfilesByUser(userId) {
-  const sql = `
-    SELECT 
-      p.id,
-      p.detective_name,
-      p.rank_id,
-      p.xp,
-      p.reputation_score,
-      p.cases_solved,
-      p.cases_failed,
-      r.title AS rank_title,
-      r.min_xp AS rank_min_xp,
-      r.max_xp AS rank_max_xp
-    FROM profiles p
-    LEFT JOIN ranks r ON r.id = p.rank_id
-    WHERE p.user_id = ?
-    ORDER BY p.created_at ASC
-  `;
-  const [rows] = await pool.execute(sql, [userId]);
-  return rows;
+  const rows = await prisma.profile.findMany({
+    where: { userId },
+    include: { rank: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  return rows.map((p) => ({
+    id: p.id,
+    detective_name: p.detectiveName,
+    rank_id: p.rankId,
+    xp: p.xp,
+    reputation_score: p.reputationScore,
+    cases_solved: p.casesSolved,
+    cases_failed: p.casesFailed,
+    rank_title: p.rank?.title ?? null,
+    rank_min_xp: p.rank ? num(p.rank.minXp) : null,
+    rank_max_xp: p.rank ? num(p.rank.maxXp) : null,
+  }));
 }
 
 export async function findProfileById(profileId) {
-  const sql = `
-    SELECT p.*, r.title as rank_title 
-    FROM profiles p 
-    LEFT JOIN ranks r ON r.id = p.rank_id
-    WHERE p.id = ?
-  `;
-  const [rows] = await pool.execute(sql, [profileId]);
-  return rows[0];
+  return toProfileRow(
+    await prisma.profile.findUnique({
+      where: { id: profileId },
+      include: { rank: true },
+    })
+  );
 }
 
 export async function updateProfileStats(profileId, data) {
-  const {
-    xp,
-    reputation_score,
-    cases_solved,
-    cases_failed,
-  } = data;
-
-  await pool.execute(
-    `
-    UPDATE profiles
-    SET
-      xp = ?,
-      reputation_score = ?,
-      cases_solved = ?,
-      cases_failed = ?
-    WHERE id = ?
-    `,
-    [xp, reputation_score, cases_solved, cases_failed, profileId]
-  );
+  const { xp, reputation_score, cases_solved, cases_failed } = data;
+  await prisma.profile.update({
+    where: { id: profileId },
+    data: {
+      xp,
+      reputationScore: reputation_score,
+      casesSolved: cases_solved,
+      casesFailed: cases_failed,
+    },
+  });
 }
 
 export async function getProfileByUserId(userId) {
-  const [rows] = await pool.execute(
-    `
-    SELECT 
-      p.id,
-      p.detective_name,
-      p.user_id,
-      p.rank_id,
-      p.xp,
-      p.reputation_score,
-      p.cases_solved,
-      p.cases_failed,
-      p.created_at,
-      r.title AS rank_title,
-      r.min_xp AS rank_min_xp
-    FROM profiles p
-    LEFT JOIN ranks r ON r.id = p.rank_id
-    WHERE p.user_id = ?
-    LIMIT 1
-    `,
-    [userId]
-  );
-  return rows[0];
+  const p = await prisma.profile.findFirst({
+    where: { userId },
+    include: { rank: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (!p) return undefined;
+  return {
+    id: p.id,
+    detective_name: p.detectiveName,
+    user_id: p.userId,
+    rank_id: p.rankId,
+    xp: p.xp,
+    reputation_score: p.reputationScore,
+    cases_solved: p.casesSolved,
+    cases_failed: p.casesFailed,
+    created_at: p.createdAt,
+    rank_title: p.rank?.title ?? null,
+    rank_min_xp: p.rank ? num(p.rank.minXp) : null,
+  };
 }
 
 export async function updateProfileName(profileId, detectiveName) {
-  await pool.execute(
-    `
-    UPDATE profiles
-    SET detective_name = ?
-    WHERE id = ?
-    `,
-    [detectiveName, profileId]
-  );
+  await prisma.profile.update({
+    where: { id: profileId },
+    data: { detectiveName },
+  });
 }
 
 export async function findProfileByName(detectiveName) {
-  const [rows] = await pool.execute(
-    `SELECT * FROM profiles WHERE detective_name = ? LIMIT 1`,
-    [detectiveName]
+  return toProfileRow(
+    await prisma.profile.findUnique({ where: { detectiveName } })
   );
-  return rows[0] || null;
+}
+
+export async function updateProfileRank(profileId, rankId) {
+  await prisma.profile.update({
+    where: { id: profileId },
+    data: { rankId },
+  });
+}
+
+export async function getProfileCaseCounters(profileId) {
+  const [solved, failed] = await Promise.all([
+    prisma.activeCase.count({ where: { profileId, status: 'SOLVED' } }),
+    prisma.activeCase.count({ where: { profileId, status: 'FAILED' } }),
+  ]);
+  return { solved, failed, total: solved + failed };
+}
+
+export async function updateProfileCaseCounters(profileId, solved, failed) {
+  await prisma.profile.update({
+    where: { id: profileId },
+    data: { casesSolved: solved, casesFailed: failed },
+  });
 }
