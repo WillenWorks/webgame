@@ -74,3 +74,6 @@ temp/
 backend/runner_report_*.json
 backend/.output/
 frontend/.output/
+
+# preview do mapa (gerado por scripts/build-map-preview.mjs)
+frontend/public/map-preview.html

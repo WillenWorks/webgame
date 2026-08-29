@@ -65,7 +65,7 @@
           >
             <div class="w-16 h-16 -translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 rounded-full bg-red-500/20 animate-ping-slow"></div>
             <div class="w-4 h-4 rotate-45 bg-red-600 border-2 border-white shadow-lg"></div>
-            <div class="absolute left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 bg-slate-900/95 border-l-2 border-red-500 text-[10px] font-bold text-white whitespace-nowrap">
+            <div class="absolute mt-1 px-2 py-0.5 bg-slate-900/95 border-l-2 border-red-500 text-[10px] font-bold text-white whitespace-nowrap" :style="labelStyle(currentPos?.xPct)">
               {{ currentCity?.name || '—' }}
             </div>
           </div>
@@ -85,7 +85,8 @@
                 : 'bg-cyan-500 group-hover:bg-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.7)]'"
             ></div>
             <div
-              class="absolute left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-slate-900/90 border-l-2 text-[10px] whitespace-nowrap transition-opacity"
+              class="absolute mt-1 px-1.5 py-0.5 bg-slate-900/90 border-l-2 text-[10px] whitespace-nowrap transition-opacity"
+              :style="labelStyle(city.pos.xPct)"
               :class="selectedDestination?.id === city.id
                 ? 'opacity-100 border-amber-400 text-amber-100'
                 : 'opacity-0 group-hover:opacity-100 border-cyan-500/50 text-cyan-100'"
@@ -308,6 +309,14 @@ function confirmTravel() {
 
 function goToCity() { router.push(`/cases/${caseId}/city`) }
 function goToDashboard() { router.push('/dashboard') }
+
+// Alinha o rótulo do pin para não vazar do mapa perto das bordas.
+function labelStyle(xPct?: number) {
+  if (xPct == null) return { left: '50%', transform: 'translateX(-50%)' }
+  if (xPct > 85) return { right: '0', transform: 'translateX(0)' }
+  if (xPct < 15) return { left: '0', transform: 'translateX(0)' }
+  return { left: '50%', transform: 'translateX(-50%)' }
+}
 
 onMounted(async () => {
   try {

@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { feature } from 'topojson-client'
-import topology from 'world-atlas/countries-110m.json'
+import topology from 'world-atlas/countries-50m.json'
 import { MAP_FRAME, MAP_ASPECT } from '@/utils/geoProjection'
 
 const VB_W = 1000
