@@ -5,6 +5,8 @@ import {
   computeXpBreakdown,
   rankForXp,
   evaluatePromotion,
+  buildPerformance,
+  finishedEarlierMinutes,
 } from '../src/domain/xp.rules.js';
 
 const XP_RULE = { xp_base: 100, bonus_precision: 50, debuff_failure_factor: 0.5 };
@@ -85,6 +87,43 @@ describe('computeXpBreakdown — cálculo de XP', () => {
     });
     assert.equal(breakdown.daysEarly, 0);
     assert.equal(breakdown.bonusDays, 0);
+  });
+});
+
+describe('finishedEarlierMinutes / buildPerformance — métricas de fechamento', () => {
+  it('minutos de antecedência, nunca negativo', () => {
+    assert.equal(finishedEarlierMinutes('2026-01-10T12:00:00Z', '2026-01-10T09:30:00Z'), 150);
+    assert.equal(finishedEarlierMinutes('2026-01-10T00:00:00Z', '2026-01-11T00:00:00Z'), 0);
+  });
+
+  it('SOLVED sem erros de rota → precisão perfeita e minutos adiantados', () => {
+    const p = buildPerformance({
+      status: 'SOLVED',
+      routeErrors: 0,
+      deadlineISO: '2026-01-10T12:00:00Z',
+      finishISO: '2026-01-09T12:00:00Z',
+    });
+    assert.equal(p.finished, true);
+    assert.equal(p.perfectPrecision, true);
+    assert.equal(p.finishedEarlierMinutes, 1440);
+  });
+
+  it('SOLVED com erro de rota → sem precisão perfeita', () => {
+    const p = buildPerformance({ status: 'SOLVED', routeErrors: 2, deadlineISO: 'x', finishISO: 'y' });
+    assert.equal(p.perfectPrecision, false);
+    assert.equal(p.routeErrors, 2);
+  });
+
+  it('FAILED → não finished, sem bônus de tempo', () => {
+    const p = buildPerformance({
+      status: 'FAILED',
+      routeErrors: 0,
+      deadlineISO: '2026-01-10T12:00:00Z',
+      finishISO: '2026-01-08T12:00:00Z',
+    });
+    assert.equal(p.finished, false);
+    assert.equal(p.perfectPrecision, false);
+    assert.equal(p.finishedEarlierMinutes, 0);
   });
 });
 

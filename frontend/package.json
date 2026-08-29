@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "nuxt generate",
+    "prebuild": "node scripts/check-routes.mjs",
+    "check": "node scripts/check-routes.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",

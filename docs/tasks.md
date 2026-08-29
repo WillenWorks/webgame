@@ -164,3 +164,25 @@ graph TD
 4. Camada de `services/` livre de qualquer chamada SQL manual ou import de `database.js`.
 5. Runner E2E completa uma partida inteira com 100% de sucesso.
 6. Frontend compila sem warnings e executa a gameplay perfeitamente no navegador.
+
+---
+
+## 🔧 Refatoração "entregar o modelo de negócio" (2026-08-29)
+
+Plano `splendid-wondering-nygaard`. Cobertura por fase:
+
+- **P0 — corretude da geração e das regras**
+  - Rota geograficamente coerente (`domain/route.rules.js`) + decoys plausíveis.
+  - Localidades variáveis por dificuldade (`config/game.rules.js`); semeador único.
+  - Culpado sempre unicamente identificável (`domain/suspect.rules.js`).
+  - Pistas culturais determinísticas e validadas (`domain/clue.rules.js`); IA opcional.
+  - `finish_case`: XP com bônus de tempo real, `case_performance`, promoção de patente.
+  - Deadline derivado do custo real de investigação; corrigido consumo **duplo** do
+    tempo de viagem; idempotência de investigate/travel.
+  - `GET /cases/:id/suspects/attributes`; contrato plano de investigate.
+- **P1 — mapa equiretangular** — `utils/geoProjection.ts`, `components/map/WorldMap.vue`,
+  `map.vue` reescrito (pins em %, sem calibração por tela).
+- **P2 — fluxo/polish** — `pages/villains.vue`, dashboard, timezone central, limpeza de logs.
+- **P3 — testes/docs** — `test/generation/*` (DB real), regras puras, `runner.js`
+  endurecido (`npm run e2e:all`), `frontend/scripts/check-routes.mjs`, este doc +
+  `docs/game-design.md`.
