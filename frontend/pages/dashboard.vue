@@ -95,15 +95,15 @@
             <div>
                <h2 class="text-3xl font-display text-white uppercase mb-2">MISSÃO EM ANDAMENTO</h2>
                <p class="text-slate-400 max-w-md mx-auto">
-                  Agente, você possui uma operação ativa em <span class="text-amber-400">{{ activeCase.intro_text ? 'LOCAL DESCONHECIDO' : 'TRÂNSITO' }}</span>. 
-                  O tempo é essencial.
+                  Agente, você possui uma operação ativa. O tempo é essencial —
+                  retome a perseguição antes que o rastro esfrie.
                </p>
             </div>
             
             <div class="grid grid-cols-2 gap-8 w-full max-w-md border-t border-slate-700 pt-6">
                <div>
                   <p class="text-xs text-slate-500 uppercase">OBJETIVO</p>
-                  <p class="text-cyan-400 font-mono text-sm">{{ activeCase.stolenObject || 'RECUPERAR ARTEFATO' }}</p>
+                  <p class="text-cyan-400 font-mono text-sm">{{ activeCase.case?.stolen_object || 'RECUPERAR ARTEFATO' }}</p>
                </div>
                <div>
                   <p class="text-xs text-slate-500 uppercase">STATUS</p>
@@ -291,7 +291,7 @@ const createNewCase = async (difficulty) => {
 }
 
 const resumeMission = (caseId) => {
-  router.push(`/cases/${caseId}/map`)
+  router.push(`/cases/${caseId}/briefing`)
 }
 
 const goToArchives = () => {

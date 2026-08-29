@@ -84,20 +84,22 @@ export async function investigateService(caseId, cityPlaceId) {
       ? "Você cercou o vilão e efetuou a prisão sem incidentes! Bom trabalho, Detetive."
       : "Você prendeu a pessoa errada... O verdadeiro criminoso escapou!";
 
-    await insertCapturedVillainLog({
-      id: uuid(),
-      profileId: gameCase.profile_id,
-      caseId,
-      villainName: culprit?.name || "Desconhecido",
-      attributesSnapshot: {
-        sex: culprit?.sex,
-        hair: culprit?.hair,
-        hobby: culprit?.hobby,
-        vehicle: culprit?.vehicle,
-        feature: culprit?.feature,
-      },
-      finalDialogue,
-    });
+    if (isCorrectWarrant) {
+      await insertCapturedVillainLog({
+        id: uuid(),
+        profileId: gameCase.profile_id,
+        caseId,
+        villainName: culprit?.name || "Desconhecido",
+        attributesSnapshot: {
+          sex: culprit?.sex,
+          hair: culprit?.hair,
+          hobby: culprit?.hobby,
+          vehicle: culprit?.vehicle,
+          feature: culprit?.feature,
+        },
+        finalDialogue,
+      });
+    }
 
     try {
       await setCapturePlace(caseId, cityPlaceId);

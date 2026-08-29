@@ -250,8 +250,6 @@ export function useGame() {
     isLoading.value = true;
     try {
       const data = await fetchApi(`/cases/${caseId}/visit-current`);
-      console.log(`visitCurrentCity for caseId: ${caseId}`);
-      console.log("visitCurrentCity data:", data);
       if (data) {
         currentCity.value = data.city;
         syncGameState(data);
@@ -387,7 +385,6 @@ export function useGame() {
 
       const options: number[] =
         res.route[stepOrder - 1]?.clues_generated_json?.options ?? [];
-      console.log("[GAME] Rotas disponíveis (IDs):", options);
 
       if (!options.length) {
         availableRoutes.value = [];
