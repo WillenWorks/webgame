@@ -13,8 +13,10 @@
     "axios": "^1.13.2",
     "lucide-vue-next": "^0.344.0",
     "nuxt": "^3.21.0",
+    "topojson-client": "^3.1.0",
     "vue": "^3.5.26",
-    "vue-router": "^4.6.4"
+    "vue-router": "^4.6.4",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.14.0",
