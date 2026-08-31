@@ -13,7 +13,8 @@ export async function dbAvailable() {
     ]);
     const cities = await prisma.city.count();
     const places = await prisma.placeType.count();
-    return cities >= 20 && places >= 5;
+    const cityPlaces = await prisma.cityPlace.count();
+    return cities >= 20 && places >= 5 && cityPlaces >= 100;
   } catch {
     return false;
   }

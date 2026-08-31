@@ -1,12 +1,61 @@
 import { v4 as uuid } from 'uuid';
 import { getRouteSteps, getStepOptions } from '../repositories/route.repo.js';
-import { insertCityPlace, getAllPlaceTypes, setCaptureFlag } from '../repositories/visit.repo.js';
+import {
+  insertCityPlace,
+  getAllPlaceTypes,
+  getCityPlaceCatalog,
+  setCaptureFlag,
+} from '../repositories/visit.repo.js';
 import { getCaseDifficulty } from '../repositories/case.repo.js';
 import { localitiesFor } from '../config/game.rules.js';
 
-function pickRandomPlaceTypes(all, count) {
-  const shuffled = [...all].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.max(1, Math.min(count, all.length)));
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * Escolhe, para cada slot de pista, uma localidade do catálogo da cidade
+ * (`city_places`), sem repetir dentro da cidade. Preferência diegética:
+ * - NEXT_LOCATION → marco de enredo (LANDMARK): onde a testemunha "viu" o alvo.
+ * - VILLAIN       → local cívico (GENERIC): testemunha comum do dia a dia.
+ * Catálogo esgotado → completa com o pool genérico global (`place_types`).
+ */
+function selectPlacesForCity(catalog, clueTypes, fallbackTypes) {
+  const pools = {
+    LANDMARK: shuffle(catalog.filter((p) => p.kind === 'LANDMARK')),
+    GENERIC: shuffle(catalog.filter((p) => p.kind === 'GENERIC')),
+  };
+  const usedCatalogIds = new Set();
+
+  const takeFromCatalog = (preferredKind) => {
+    const otherKind = preferredKind === 'LANDMARK' ? 'GENERIC' : 'LANDMARK';
+    for (const kind of [preferredKind, otherKind]) {
+      const hit = pools[kind].find((p) => !usedCatalogIds.has(p.id));
+      if (hit) {
+        usedCatalogIds.add(hit.id);
+        return hit.id;
+      }
+    }
+    return null;
+  };
+
+  const fallback = shuffle(fallbackTypes);
+  let fbIdx = 0;
+
+  return clueTypes.map((clueType) => {
+    const preferred = clueType === 'NEXT_LOCATION' ? 'LANDMARK' : 'GENERIC';
+    const cityPlaceId = takeFromCatalog(preferred);
+    if (cityPlaceId != null) return { cityPlaceId };
+
+    const fb = fallback[fbIdx % fallback.length];
+    fbIdx += 1;
+    return { placeTypeId: fb?.id ?? null };
+  });
 }
 
 /**
@@ -23,16 +72,29 @@ export async function seedCasePhases(caseId, difficulty = null) {
   const clueMix = localitiesFor(diff);
   const localesPerCity = clueMix.length;
 
+  // Pool genérico global — só fallback quando o catálogo da cidade não cobre
+  // todos os slots da dificuldade.
   const placeTypes = await getAllPlaceTypes();
-  if (!placeTypes || placeTypes.length < localesPerCity) {
-    throw new Error('Tipos de locais insuficientes para semeadura');
+  if (!placeTypes || placeTypes.length === 0) {
+    throw new Error('Pool de tipos de local (fallback) vazio — rode o seed');
   }
 
   const steps = await getRouteSteps(caseId);
   if (!steps || steps.length === 0) return;
 
+  // Uma mesma cidade pode aparecer como decoy em mais de um passo do mapa
+  // (`buildRoute` só deduplica decoys dentro de um passo, não entre passos).
+  // Sem esta trava, `insertLocales` roda 2x para essa cidade e ela passa a
+  // exibir 6+ localidades em vez das 3/4/5 estipuladas pela dificuldade.
+  const seededCityIds = new Set();
+
   const insertLocales = async (cityId, clueTypes) => {
-    const chosen = pickRandomPlaceTypes(placeTypes, clueTypes.length);
+    if (seededCityIds.has(cityId)) return [];
+    seededCityIds.add(cityId);
+
+    const catalog = await getCityPlaceCatalog(cityId);
+    const picks = selectPlacesForCity(catalog, clueTypes, placeTypes);
+
     const ids = [];
     for (let k = 0; k < clueTypes.length; k++) {
       const id = uuid();
@@ -40,7 +102,8 @@ export async function seedCasePhases(caseId, difficulty = null) {
         id,
         caseId,
         cityId,
-        placeTypeId: chosen[k % chosen.length].id,
+        cityPlaceId: picks[k].cityPlaceId ?? null,
+        placeTypeId: picks[k].placeTypeId ?? null,
         clueType: clueTypes[k],
       });
       ids.push(id);

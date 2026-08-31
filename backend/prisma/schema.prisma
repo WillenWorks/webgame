@@ -40,6 +40,11 @@ enum ClueType {
   VILLAIN_ATTRIBUTE
 }
 
+enum CityPlaceKind {
+  LANDMARK
+  GENERIC
+}
+
 // ── Autenticação & Perfil ────────────────────────────────────────────────────
 
 model User {
@@ -198,6 +203,7 @@ model City {
   routeSteps          CaseRoute[]
   currentViews        CaseCurrentView[]
   cityPlaces          CaseCityPlace[]
+  placeCatalog        CityPlace[]
   travelLogsFrom      CaseTravelLog[]      @relation("TravelLogFrom")
   travelLogsTo        CaseTravelLog[]      @relation("TravelLogTo")
   travelOverridesFrom TravelTimeOverride[] @relation("TravelOverrideFrom")
@@ -423,17 +429,37 @@ model PlaceType {
   @@map("place_types")
 }
 
+// Catálogo de localidades por cidade: marcos de enredo (LANDMARK) e locais
+// cívicos genéricos (GENERIC). O gerador de caso sorteia daqui, respeitando o
+// mix da dificuldade (`config/game.rules.js`).
+model CityPlace {
+  id               Int           @id @default(autoincrement())
+  cityId           Int           @map("city_id")
+  name             String
+  kind             CityPlaceKind @default(GENERIC)
+  interactionStyle String        @map("interaction_style")
+
+  city       City            @relation(fields: [cityId], references: [id])
+  cityPlaces CaseCityPlace[]
+
+  @@unique([cityId, name])
+  @@index([cityId])
+  @@map("city_places")
+}
+
 model CaseCityPlace {
   id                String   @id @default(uuid())
   caseId            String   @map("case_id")
   cityId            Int      @map("city_id")
-  placeTypeId       Int      @map("place_type_id")
+  placeTypeId       Int?     @map("place_type_id")
+  cityPlaceId       Int?     @map("city_place_id")
   clueType          ClueType @map("clue_type")
   isCaptureLocation Boolean  @default(false) @map("is_capture_location")
 
   case      ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
   city      City       @relation(fields: [cityId], references: [id])
-  placeType PlaceType  @relation(fields: [placeTypeId], references: [id])
+  placeType PlaceType? @relation(fields: [placeTypeId], references: [id])
+  cityPlace CityPlace? @relation(fields: [cityPlaceId], references: [id])
   clues     CaseClue[]
 
   @@index([caseId, cityId])

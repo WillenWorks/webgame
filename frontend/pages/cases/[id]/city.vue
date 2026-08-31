@@ -70,15 +70,15 @@
             :key="place.id"
             @click="confirmInvestigate(place)"
             :disabled="!!investigating"
-            class="group relative border-2 border-slate-700 hover:border-amber-400 bg-black/60 p-4 transition-all hover:bg-amber-400/10 active:translate-y-1 disabled:opacity-50 flex flex-col gap-3"
+            class="group relative min-w-0 overflow-hidden border-2 border-slate-700 hover:border-amber-400 bg-black/60 p-4 transition-all hover:bg-amber-400/10 active:translate-y-1 disabled:opacity-50 flex flex-col gap-3"
           >
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 min-w-0 w-full">
               <div class="w-12 h-12 bg-black border border-slate-700 p-1 group-hover:border-amber-400 transition-colors flex items-center justify-center shrink-0">
                  <!-- Place Image -->
                  <img :src="getPlaceImage(place)" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" @error="handleImgError" />
               </div>
-              <div class="text-left">
-                <h3 class="text-lg font-display text-white group-hover:text-amber-400 transition-colors uppercase leading-tight">
+              <div class="text-left min-w-0 flex-1">
+                <h3 class="text-base md:text-lg font-display text-white group-hover:text-amber-400 transition-colors uppercase leading-tight break-words hyphens-auto">
                   {{ place.name }}
                 </h3>
                 <!-- Environment Type REMOVED as requested -->
@@ -130,7 +130,7 @@
              </div>
           </div>
 
-          <h3 class="text-2xl font-display text-white uppercase tracking-wider">VISITAR {{ selectedPlace.name }}?</h3>
+          <h3 class="text-xl md:text-2xl font-display text-white uppercase tracking-wider break-words">VISITAR {{ selectedPlace.name }}?</h3>
           
           <div class="py-2 px-4 border-y border-dashed border-slate-700 bg-black/20">
             <p class="text-slate-300 text-sm leading-relaxed">

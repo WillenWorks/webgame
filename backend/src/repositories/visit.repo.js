@@ -39,47 +39,77 @@ export async function getCurrentCityByCase(caseId) {
   };
 }
 
+// Nome e arquétipo de NPC vêm do catálogo por cidade (`city_places`) quando
+// presente; senão, do pool genérico global (`place_types`) — compatível com
+// casos criados antes do catálogo por cidade.
+function resolvePlace(cp) {
+  const src = cp.cityPlace ?? cp.placeType;
+  return {
+    name: src?.name ?? 'Local Desconhecido',
+    interaction_style: src?.interactionStyle ?? 'Testemunha reticente, de poucas palavras.',
+  };
+}
+
 export async function getCityPlaces(caseId, cityId) {
   const rows = await prisma.caseCityPlace.findMany({
     where: { caseId, cityId: int(cityId) },
-    include: { placeType: true },
+    include: { placeType: true, cityPlace: true },
+    orderBy: { id: 'asc' },
   });
   return rows.map((cp) => ({
     id: cp.id,
     place_type_id: cp.placeTypeId,
-    name: cp.placeType.name,
-    interaction_style: cp.placeType.interactionStyle,
+    city_place_id: cp.cityPlaceId,
     clue_type: cp.clueType,
+    ...resolvePlace(cp),
   }));
 }
 
 export async function getCityPlaceById(caseId, cityPlaceId) {
   const cp = await prisma.caseCityPlace.findFirst({
     where: { id: cityPlaceId, caseId },
-    include: { placeType: true },
+    include: { placeType: true, cityPlace: true },
   });
   if (!cp) return undefined;
   return {
     id: cp.id,
     city_id: cp.cityId,
     place_type_id: cp.placeTypeId,
+    city_place_id: cp.cityPlaceId,
     clue_type: cp.clueType,
     is_capture_location: cp.isCaptureLocation,
-    name: cp.placeType.name,
-    interaction_style: cp.placeType.interactionStyle,
+    ...resolvePlace(cp),
   };
 }
 
-export async function insertCityPlace({ id, caseId, cityId, placeTypeId, clueType }) {
+export async function insertCityPlace({ id, caseId, cityId, placeTypeId = null, cityPlaceId = null, clueType }) {
   await prisma.caseCityPlace.create({
     data: {
       id,
       caseId,
       cityId: int(cityId),
-      placeTypeId: int(placeTypeId),
+      placeTypeId: placeTypeId == null ? null : int(placeTypeId),
+      cityPlaceId: cityPlaceId == null ? null : int(cityPlaceId),
       clueType,
     },
   });
+}
+
+/**
+ * Catálogo de localidades de uma cidade (marcos de enredo + genéricos),
+ * insumo do semeador de fases (`phase.seed.service.js`).
+ */
+export async function getCityPlaceCatalog(cityId) {
+  const rows = await prisma.cityPlace.findMany({
+    where: { cityId: int(cityId) },
+    orderBy: { id: 'asc' },
+  });
+  return rows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    kind: p.kind,
+    interaction_style: p.interactionStyle,
+  }));
 }
 
 export async function getAllPlaceTypes() {

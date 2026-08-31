@@ -51,13 +51,17 @@ export async function getCaseCityPlace(caseId, cityId, placeTypeId) {
       cityId: int(cityId),
       ...(placeTypeId ? { placeTypeId: int(placeTypeId) } : {}),
     },
-    include: { placeType: true },
+    include: { placeType: true, cityPlace: true },
   });
   if (!row) return undefined;
   return {
     place_type_id: row.placeTypeId,
+    city_place_id: row.cityPlaceId,
     clue_type: row.clueType,
-    interaction_style: row.placeType.interactionStyle,
+    interaction_style:
+      row.cityPlace?.interactionStyle ??
+      row.placeType?.interactionStyle ??
+      'Testemunha reticente, de poucas palavras.',
   };
 }
 

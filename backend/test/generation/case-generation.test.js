@@ -126,6 +126,24 @@ describe('Geração de caso — dados corretos por dificuldade', { skip }, () =>
         assert.equal(villain, mix.filter((c) => c === 'VILLAIN').length);
       });
 
+      it('teto por cidade: nenhuma cidade do caso excede o limite da dificuldade', () => {
+        const { places } = cases[d];
+        const limit = localitiesFor(d).length;
+        const byCity = places.reduce((m, p) => m.set(p.cityId, (m.get(p.cityId) || 0) + 1), new Map());
+        for (const [cityId, count] of byCity) {
+          assert.ok(count <= limit, `cidade ${cityId} tem ${count} localidades (limite ${limit})`);
+        }
+      });
+
+      it('localidades vêm do catálogo por cidade (city_places), não do pool genérico', () => {
+        const { route, places } = cases[d];
+        const startPlaces = places.filter((p) => p.cityId === route[0].cityId);
+        assert.ok(
+          startPlaces.every((p) => p.cityPlaceId != null),
+          'toda localidade da cidade inicial deve referenciar um city_place do catálogo',
+        );
+      });
+
       it('exatamente 1 ponto de captura, na cidade final da rota', () => {
         const { route, places } = cases[d];
         const finalCityId = route[route.length - 1].cityId;

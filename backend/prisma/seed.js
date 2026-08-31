@@ -165,6 +165,207 @@ const PLACE_TYPES = [
   { name: 'Feira de Antiguidades', interactionStyle: 'Antiquário astuto que avalia as pessoas como avalia relíquias.' },
 ];
 
+// ── Catálogo de localidades por cidade ──────────────────────────────────────
+//
+// O gerador de caso (`phase.seed.service.js`) sorteia daqui, respeitando o
+// limite/mix da dificuldade (EASY 3 · HARD 4 · EXTREME 5). Cada cidade tem
+// LANDMARKs de enredo + os GENERICs abaixo — total ≥ 5, suficiente para EXTREME.
+
+const GENERIC_PLACES = [
+  { name: 'Aeroporto Internacional', interactionStyle: 'Funcionário apressado do balcão de informações, de olho no relógio e na fila.' },
+  { name: 'Banco Central', interactionStyle: 'Gerente de câmbio desconfiado, que pesa cada palavra antes de falar.' },
+  { name: 'Biblioteca Municipal', interactionStyle: 'Bibliotecário meticuloso que fala baixo e cita datas de memória.' },
+  { name: 'Delegacia de Polícia', interactionStyle: 'Detetive local cético, que já ouviu todas as desculpas do mundo.' },
+];
+
+const CITY_LANDMARKS = {
+  Cairo: [
+    { name: 'Museu Egípcio', interactionStyle: 'Curador erudito e formal, que fala como se conduzisse uma visita guiada.' },
+    { name: 'Bazar Khan el-Khalili', interactionStyle: 'Mercador tagarela de especiarias que conhece cada beco do souk.' },
+    { name: 'Pirâmides de Gizé', interactionStyle: 'Guia beduíno lacônico, acostumado a turistas e a ventos de areia.' },
+  ],
+  Marrakech: [
+    { name: 'Praça Jemaa el-Fna', interactionStyle: 'Contador de histórias teatral, cercado de encantadores de serpentes e vendedores.' },
+    { name: 'Souk das Especiarias', interactionStyle: 'Comerciante astuto que avalia o cliente como avalia açafrão.' },
+    { name: 'Jardim Majorelle', interactionStyle: 'Jardineiro discreto, orgulhoso do azul cobalto e dos cactos.' },
+  ],
+  'Cidade do Cabo': [
+    { name: 'Table Mountain', interactionStyle: 'Operador do bondinho, atento ao vento e às nuvens que fecham o cume.' },
+    { name: 'Robben Island', interactionStyle: 'Ex-detento virado guia, de fala pausada e memória afiada.' },
+    { name: 'Bairro Bo-Kaap', interactionStyle: 'Moradora hospitaleira das casas coloridas, que serve chá e conversa.' },
+  ],
+  'Nairóbi': [
+    { name: 'Parque Nacional de Nairóbi', interactionStyle: 'Guarda-florestal direto, com um rádio sempre chiando no cinto.' },
+    { name: 'Mercado Maasai', interactionStyle: 'Artesã de miçangas que pechincha rindo.' },
+    { name: 'Museu Nacional do Quênia', interactionStyle: 'Paleontólogo entusiasmado com os fósseis do Vale do Rift.' },
+  ],
+  Lagos: [
+    { name: 'Mercado de Balogun', interactionStyle: 'Comerciante barulhento que grita preços por cima da multidão.' },
+    { name: 'Ilha Victoria', interactionStyle: 'Corretor de imóveis engomado, cheio de contatos e evasivas.' },
+    { name: 'The Shrine (casa do Afrobeat)', interactionStyle: 'Músico noturno de fala arrastada, entre um ensaio e outro.' },
+  ],
+  'Adis Abeba': [
+    { name: 'Museu Nacional da Etiópia', interactionStyle: 'Guia orgulhoso que apresenta a "Lucy" como uma velha conhecida.' },
+    { name: 'Mercato', interactionStyle: 'Vendedor de café que insiste na cerimônia completa antes de responder.' },
+    { name: 'Catedral da Santíssima Trindade', interactionStyle: 'Diácono solene que fala em voz baixa sob os vitrais.' },
+  ],
+  'Nova York': [
+    { name: 'Estátua da Liberdade', interactionStyle: 'Guarda-parque tagarela do ferry, recitando números de cor.' },
+    { name: 'Grand Central Terminal', interactionStyle: 'Bilheteiro veloz que responde sem levantar os olhos.' },
+    { name: 'Museu Metropolitano de Arte', interactionStyle: 'Curadora formal que trata cada sala como uma aula.' },
+  ],
+  'São Francisco': [
+    { name: 'Ponte Golden Gate', interactionStyle: 'Pedagiário nostálgico que fala da névoa como se falasse de uma pessoa.' },
+    { name: "Fisherman's Wharf", interactionStyle: 'Pescador rústico com histórias de barcos e leões-marinhos.' },
+    { name: 'Ilha de Alcatraz', interactionStyle: 'Guia de fala teatral, que baixa a voz ao entrar nas celas.' },
+  ],
+  'Cidade do México': [
+    { name: 'Templo Mayor', interactionStyle: 'Arqueólogo apaixonado pelos astecas, que se perde em detalhes.' },
+    { name: 'Praça Garibaldi', interactionStyle: 'Mariachi expansivo que responde quase cantando.' },
+    { name: 'Casa Azul (Museu Frida Kahlo)', interactionStyle: 'Guia sensível, protetora da memória da artista.' },
+  ],
+  Toronto: [
+    { name: 'CN Tower', interactionStyle: 'Recepcionista simpática do elevador panorâmico, de olho no relógio.' },
+    { name: 'Distillery District', interactionStyle: 'Barista descolado que conhece toda a fofoca do bairro.' },
+    { name: 'Royal Ontario Museum', interactionStyle: 'Curador britânico transplantado, meticuloso e irônico.' },
+  ],
+  Havana: [
+    { name: 'Malecón', interactionStyle: 'Pescador veterano encostado no muro, sem pressa nenhuma.' },
+    { name: 'Fábrica de Charutos Partagás', interactionStyle: 'Torcedor de charutos que fala enquanto enrola as folhas.' },
+    { name: 'Praça da Catedral (Habana Vieja)', interactionStyle: 'Guia de fala melodiosa entre os carros dos anos 50.' },
+  ],
+  'Cidade da Guatemala': [
+    { name: 'Museu Popol Vuh', interactionStyle: 'Curadora que narra os mitos maias como se fossem notícia de jornal.' },
+    { name: 'Mercado Central', interactionStyle: 'Tecelã de huipiles que mede o cliente com o olhar.' },
+    { name: 'Palácio Nacional da Cultura', interactionStyle: 'Funcionário cerimonioso, cioso dos corredores de pedra verde.' },
+  ],
+  'Rio de Janeiro': [
+    { name: 'Cristo Redentor', interactionStyle: 'Guia do trenzinho do Corcovado, tagarela e suado.' },
+    { name: 'Pão de Açúcar', interactionStyle: 'Operador do bondinho, de olho no horário do pôr do sol.' },
+    { name: 'Escadaria Selarón', interactionStyle: 'Artista de rua falante, que aponta azulejos de cada país.' },
+  ],
+  'Buenos Aires': [
+    { name: 'Caminito (La Boca)', interactionStyle: 'Dançarino de tango aposentado, dramático em cada frase.' },
+    { name: 'Cemitério da Recoleta', interactionStyle: 'Zelador soturno que sabe onde fica cada mausoléu.' },
+    { name: 'Café Tortoni', interactionStyle: 'Garçom de gravata-borboleta, formal e cheio de histórias.' },
+  ],
+  Lima: [
+    { name: 'Huaca Pucllana', interactionStyle: 'Arqueóloga que fala das pirâmides de adobe com carinho.' },
+    { name: 'Mercado de Surquillo', interactionStyle: 'Cevicheiro orgulhoso que descreve tudo em termos de peixe fresco.' },
+    { name: 'Museu Larco', interactionStyle: 'Curador discreto das cerâmicas pré-colombianas.' },
+  ],
+  'Bogotá': [
+    { name: 'Museu do Ouro', interactionStyle: 'Guarda-curador que fala baixo entre as vitrines douradas.' },
+    { name: 'Cerro de Monserrate', interactionStyle: 'Operador do funicular, atento à altitude e à garoa.' },
+    { name: 'La Candelaria', interactionStyle: 'Grafiteiro loquaz que narra a história política de cada muro.' },
+  ],
+  Santiago: [
+    { name: 'Cerro San Cristóbal', interactionStyle: 'Guia do teleférico, apontando os Andes ao fundo.' },
+    { name: 'Mercado Central', interactionStyle: 'Peixeiro brincalhão que grita o cardápio do dia.' },
+    { name: 'Museu da Memória e dos Direitos Humanos', interactionStyle: 'Monitor de fala grave e cuidadosa.' },
+  ],
+  'La Paz': [
+    { name: 'Mercado das Bruxas', interactionStyle: 'Yatiri enigmática que responde por adivinhas.' },
+    { name: 'Mi Teleférico', interactionStyle: 'Cobrador tranquilo, acostumado às cabines suspensas sobre a cidade.' },
+    { name: 'Valle de la Luna', interactionStyle: 'Guia local seco, de chapéu-coco e passo firme.' },
+  ],
+  'Tóquio': [
+    { name: 'Templo Sensō-ji (Asakusa)', interactionStyle: 'Vendedora de omikuji, educada e reservada.' },
+    { name: 'Cruzamento de Shibuya', interactionStyle: 'Guarda de trânsito impassível em meio à multidão.' },
+    { name: 'Mercado Externo de Tsukiji', interactionStyle: 'Peixeiro brusco que fala entre um corte e outro.' },
+  ],
+  Pequim: [
+    { name: 'Cidade Proibida', interactionStyle: 'Guia estatal formal que segue o roteiro oficial à risca.' },
+    { name: 'Grande Muralha (Mutianyu)', interactionStyle: 'Vendedor de água nas escadarias, ofegante e insistente.' },
+    { name: 'Mercado de Panjiayuan', interactionStyle: 'Antiquário astuto que avalia pessoas como avalia jade.' },
+  ],
+  'Nova Délhi': [
+    { name: 'Portão da Índia', interactionStyle: 'Vendedor de chai ambulante que circula entre as famílias no gramado.' },
+    { name: 'Bazar de Chandni Chowk', interactionStyle: 'Comerciante veloz numa loja apertada de tecidos.' },
+    { name: 'Templo de Lótus', interactionStyle: 'Voluntário sereno que pede silêncio com um gesto.' },
+  ],
+  Bangcoc: [
+    { name: 'Grande Palácio e Wat Phra Kaew', interactionStyle: 'Guia devoto que lembra o código de vestimenta a cada frase.' },
+    { name: 'Mercado Flutuante de Damnoen Saduak', interactionStyle: 'Barqueira que negocia remando entre as canoas.' },
+    { name: 'Wat Arun', interactionStyle: 'Zelador do templo, subindo os degraus íngremes sem pressa.' },
+  ],
+  Dubai: [
+    { name: 'Burj Khalifa', interactionStyle: 'Recepcionista poliglota do mirante, impecável e cronometrado.' },
+    { name: 'Souk do Ouro (Deira)', interactionStyle: 'Ourives persuasivo que pesa correntes na sua frente.' },
+    { name: 'Safári no Deserto', interactionStyle: 'Motorista de 4x4 tranquilo, que já derrapou nessas dunas mil vezes.' },
+  ],
+  Istambul: [
+    { name: 'Hagia Sophia', interactionStyle: 'Guia erudito que alterna entre impérios a cada coluna.' },
+    { name: 'Grande Bazar', interactionStyle: 'Vendedor de tapetes hospitaleiro e inesgotável, servindo chá.' },
+    { name: 'Balsa do Bósforo', interactionStyle: 'Marinheiro da balsa, apontando as duas margens, dois continentes.' },
+  ],
+  Paris: [
+    { name: 'Torre Eiffel', interactionStyle: 'Operador do elevador, entediado e pontual.' },
+    { name: 'Museu do Louvre', interactionStyle: 'Guarda de galeria discreto, que conhece cada atalho.' },
+    { name: 'Montmartre (Sacré-Cœur)', interactionStyle: 'Retratista de rua tagarela, carvão sempre na mão.' },
+  ],
+  Londres: [
+    { name: 'Big Ben e o Parlamento', interactionStyle: 'Guarda cerimonial de poucas palavras, olhar fixo à frente.' },
+    { name: 'Museu Britânico', interactionStyle: 'Curador acadêmico que fala em notas de rodapé.' },
+    { name: 'Mercado de Camden', interactionStyle: 'Vendedor de brechó, irônico e rápido no gatilho.' },
+  ],
+  Roma: [
+    { name: 'Coliseu', interactionStyle: 'Guia teatral vestido de centurião, cobrando pela foto.' },
+    { name: 'Basílica de São Pedro (Vaticano)', interactionStyle: 'Guarda suíço impassível, respostas mínimas.' },
+    { name: 'Fontana di Trevi', interactionStyle: 'Sorveteiro tagarela que vigia quem joga moedas.' },
+  ],
+  Berlim: [
+    { name: 'Portão de Brandemburgo', interactionStyle: 'Guia de história moderna, sóbrio e preciso com datas.' },
+    { name: 'East Side Gallery', interactionStyle: 'Artista urbano veterano que pintou naquele muro nos anos 90.' },
+    { name: 'Ilha dos Museus (Pergamon)', interactionStyle: 'Curadora meticulosa, protetora dos frisos antigos.' },
+  ],
+  Madri: [
+    { name: 'Museu do Prado', interactionStyle: 'Guia apaixonado por Velázquez, que sussurra diante das telas.' },
+    { name: 'Mercado de San Miguel', interactionStyle: 'Garçom de balcão veloz, equilibrando pratos de tapas.' },
+    { name: 'Estádio Santiago Bernabéu', interactionStyle: 'Guarda-tour orgulhoso do clube, cheio de estatísticas.' },
+  ],
+  Atenas: [
+    { name: 'Acrópole e Partenon', interactionStyle: 'Arqueóloga que corrige mitos com paciência de professora.' },
+    { name: 'Bairro de Plaka', interactionStyle: 'Dono de taverna caloroso que descreve tudo em termos de moussaka.' },
+    { name: 'Museu da Acrópole', interactionStyle: 'Monitor formal, atento a quem chega perto das vitrines.' },
+  ],
+  Moscou: [
+    { name: 'Praça Vermelha e Catedral de São Basílio', interactionStyle: 'Guia estatal que recita a versão oficial da história.' },
+    { name: 'Estações-palácio do Metrô', interactionStyle: 'Funcionária severa do saguão, de olho na roleta.' },
+    { name: 'Mercado de Izmailovo', interactionStyle: 'Vendedor de matrioscas jovial, abrindo as bonecas uma a uma.' },
+  ],
+  Sydney: [
+    { name: 'Opera House', interactionStyle: 'Guia entusiasmado dos bastidores, cheio de jargão de acústica.' },
+    { name: 'Harbour Bridge', interactionStyle: 'Instrutor de escalada bem-humorado, checando os arneses.' },
+    { name: 'Bondi Beach', interactionStyle: 'Salva-vidas bronzeado e direto, sem tirar os olhos do mar.' },
+  ],
+  Melbourne: [
+    { name: 'Bondes históricos (City Circle)', interactionStyle: 'Condutor veterano que conhece cada parada e cada boato.' },
+    { name: 'Becos de café (Degraves Street)', interactionStyle: 'Barista tatuado, ágil e cheio de opinião.' },
+    { name: 'Melbourne Cricket Ground', interactionStyle: 'Guarda-tour fanático por críquete, com números na ponta da língua.' },
+  ],
+  Wellington: [
+    { name: 'Te Papa (Museu da Nova Zelândia)', interactionStyle: 'Educadora maori que conta histórias em duas línguas.' },
+    { name: 'Cable Car de Wellington', interactionStyle: 'Operador tranquilo, comentando o vento do porto.' },
+    { name: 'Weta Workshop', interactionStyle: 'Técnico de efeitos empolgado com miniaturas e moldes.' },
+  ],
+  Auckland: [
+    { name: 'Sky Tower', interactionStyle: 'Recepcionista do mirante, de olho nos que vão saltar de lá.' },
+    { name: 'Monte Eden (Maungawhau)', interactionStyle: 'Guarda do parque que explica a cratera adormecida.' },
+    { name: 'Mercado de Otara', interactionStyle: 'Vendedora polinésia hospitaleira, oferecendo taro e histórias.' },
+  ],
+  Suva: [
+    { name: 'Museu de Fiji', interactionStyle: 'Curador que apresenta as canoas drua com reverência.' },
+    { name: 'Mercado Municipal de Suva', interactionStyle: 'Vendedora de kava que insiste na cerimônia antes de falar.' },
+    { name: 'Jardim Botânico Thurston', interactionStyle: 'Jardineiro pacato, à sombra dos jaqueiros.' },
+  ],
+  'Port Moresby': [
+    { name: 'Museu e Galeria Nacional da PNG', interactionStyle: 'Guia que decifra as máscaras cerimoniais das terras altas.' },
+    { name: 'Mercado de Koki', interactionStyle: 'Vendedor de betel cauteloso, medindo o estranho.' },
+    { name: 'Vila flutuante de Hanuabada', interactionStyle: 'Pescador das palafitas, remando devagar entre as casas.' },
+  ],
+};
+
 // ── Pools de atributos de suspeitos ─────────────────────────────────────────
 
 const ATTRIBUTES = {
@@ -274,6 +475,32 @@ async function seedPlaceTypes() {
   }
 }
 
+async function seedCityPlaces() {
+  const cities = await prisma.city.findMany({ select: { id: true, name: true } });
+  let total = 0;
+  let missing = 0;
+
+  for (const city of cities) {
+    const landmarks = (CITY_LANDMARKS[city.name] || []).map((p) => ({ ...p, kind: 'LANDMARK' }));
+    if (landmarks.length === 0) missing++;
+    const generics = GENERIC_PLACES.map((p) => ({ ...p, kind: 'GENERIC' }));
+
+    for (const p of [...landmarks, ...generics]) {
+      await prisma.cityPlace.upsert({
+        where: { cityId_name: { cityId: city.id, name: p.name } },
+        update: { kind: p.kind, interactionStyle: p.interactionStyle },
+        create: { cityId: city.id, name: p.name, kind: p.kind, interactionStyle: p.interactionStyle },
+      });
+      total++;
+    }
+  }
+
+  if (missing > 0) {
+    console.warn(`[seed] Atenção: ${missing} cidade(s) sem LANDMARKs no catálogo — usarão só genéricos.`);
+  }
+  return total;
+}
+
 async function seedAttributes() {
   const models = {
     attrSex: prisma.attrSex,
@@ -330,7 +557,10 @@ async function main() {
   console.log(`[seed] Vizinhanças: ${NEIGHBORS.length} pares (bidirecionais)`);
 
   await seedPlaceTypes();
-  console.log(`[seed] Tipos de local: ${PLACE_TYPES.length}`);
+  console.log(`[seed] Tipos de local (fallback global): ${PLACE_TYPES.length}`);
+
+  const cityPlaceTotal = await seedCityPlaces();
+  console.log(`[seed] Localidades por cidade: ${cityPlaceTotal} (${Object.keys(CITY_LANDMARKS).length} cidades com marcos de enredo)`);
 
   await seedAttributes();
   const attrTotal = Object.values(ATTRIBUTES).reduce((n, a) => n + a.length, 0);

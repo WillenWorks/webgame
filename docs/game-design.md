@@ -47,6 +47,19 @@ login → perfil de detetive → abrir caso (dificuldade)
 
 - Cidades **decoy** recebem a mesma quantidade de locais, todos VILLAIN → investigar num decoy só gera **WARNING**.
 - Na cidade final, o 1º local da cidade correta é o **ponto de captura**.
+- **Cada cidade é semeada uma única vez por caso** (`seedCasePhases`): uma cidade
+  que aparece como decoy em mais de um passo do mapa não acumula localidades —
+  o total exibido nunca passa do limite da dificuldade.
+
+### Catálogo de localidades (`city_places`)
+
+Cada cidade do seed tem um **catálogo próprio** de localidades (`prisma/seed.js`):
+**marcos de enredo** (`LANDMARK` — ex.: Cairo → *Museu Egípcio*, *Bazar Khan
+el-Khalili*, *Pirâmides de Gizé*) + **locais cívicos genéricos** (`GENERIC` —
+Aeroporto Internacional, Banco Central, Biblioteca Municipal, Delegacia). O
+gerador sorteia desse catálogo respeitando o mix: slot `NEXT_LOCATION` prefere
+`LANDMARK`, slot `VILLAIN` prefere `GENERIC`. `place_types` (12 tipos globais)
+ficou como **fallback** para cidade sem catálogo suficiente.
 
 ## Custos de tempo in-game (`domain/time.rules.js`)
 

@@ -5,6 +5,8 @@ import {
 import { getStepOptions } from "../repositories/route.repo.js";
 import { countRevealedCluesInCity } from "../repositories/clue.repo.js";
 import { getCitiesByIds } from "../repositories/city.repo.js";
+import { getCaseDifficulty } from "../repositories/case.repo.js";
+import { localitiesFor } from "../config/game.rules.js";
 import { estimateTravelMinutes, getCaseTimeSummary } from "./time.service.js";
 
 /**
@@ -22,7 +24,14 @@ export async function visitCurrentCityService(caseId) {
     throw new Error("Cidade atual não encontrada");
   }
 
-  const places = await getCityPlaces(caseId, city.city_id);
+  // Trava de segurança: a dificuldade estipula quantas localidades cada cidade
+  // tem (EASY 3 · HARD 4 · EXTREME 5). Casos gerados antes da correção de
+  // double-seed de decoys podem ter linhas duplicadas — limita a exibição ao
+  // teto da dificuldade para não vazar 6+ locais na tela.
+  const difficulty = (await getCaseDifficulty(caseId)) || "EASY";
+  const maxPlaces = localitiesFor(difficulty).length;
+  const allPlaces = await getCityPlaces(caseId, city.city_id);
+  const places = allPlaces.slice(0, maxPlaces);
   const travelTime = 0;
 
   const timeState = await getCaseTimeSummary({ caseId });
@@ -69,7 +78,8 @@ export async function visitCurrentCityService(caseId) {
     places: places.map((p) => ({
       id: p.id,
       name: p.name,
-      type: p.place_type_id,
+      type: p.city_place_id ?? p.place_type_id,
+      cityPlaceId: p.city_place_id,
       interactionStyle: p.interaction_style,
       clueType: p.clue_type,
     })),
