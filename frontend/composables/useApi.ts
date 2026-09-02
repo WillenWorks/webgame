@@ -81,10 +81,16 @@ export const useApi = () => {
     } catch (err: any) {
       const status = err?.response?.status ?? err?.status
 
-      if (status === 401 && allowRetry && !isAuthEndpoint(request)) {
-        const renewed = await runRefresh()
-        if (renewed) {
-          return api<T>(request, options, false)
+      // 401 em rota protegida: tenta um único silent refresh; se não for
+      // possível renovar (sem refresh token, refresh expirado, ou o usuário
+      // do token não existe mais no backend) encerra a sessão e manda pro
+      // /login em vez de deixar o erro borbulhar pra tela.
+      if (status === 401 && !isAuthEndpoint(request)) {
+        if (allowRetry) {
+          const renewed = await runRefresh()
+          if (renewed) {
+            return api<T>(request, options, false)
+          }
         }
         endSession()
       }

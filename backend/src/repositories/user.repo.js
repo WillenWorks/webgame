@@ -29,6 +29,11 @@ export async function findUserByEmail(email) {
   return toRow(await prisma.user.findUnique({ where: { email } }));
 }
 
+export async function findUserById(id) {
+  if (!id) return null;
+  return toRow(await prisma.user.findUnique({ where: { id } }));
+}
+
 export async function getUserByUsername(username) {
   return toRow(await prisma.user.findUnique({ where: { username } }));
 }

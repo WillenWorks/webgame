@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { v4 as uuid } from "uuid";
 import env from "../config/env.js";
 import { getProfileByUserId, createProfile, findProfileByName } from "../repositories/profile.repo.js";
+import { findUserById } from "../repositories/user.repo.js";
 
 // Auth middleware:
 // - Valida JWT e injeta req.user.userId
@@ -20,6 +21,15 @@ export async function authMiddleware(req, res, next) {
     const userId = decoded.userId || decoded.sub;
     if (!userId) {
       return res.status(401).json({ ok: false, message: "Token inválido" });
+    }
+
+    // O JWT pode ter assinatura válida mas apontar para um usuário que não
+    // existe mais (ex.: banco resetado/re-migrado com o mesmo JWT_SECRET).
+    // Sem esta checagem, o user_id inválido só estoura lá no INSERT como
+    // violação de FK (500). Aqui devolvemos 401 para o front encerrar a sessão.
+    const currentUser = await findUserById(userId);
+    if (!currentUser) {
+      return res.status(401).json({ ok: false, message: "Sessão inválida — faça login novamente" });
     }
 
     // Injeta userId
