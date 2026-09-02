@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Operação Mônaco - Backend (MVP) v2",
-    "_postman_id": "ops-monaco-mvp-v2",
+    "name": "Operação Mundo - Backend",
+    "_postman_id": "ops-mundo-backend",
     "description": "Coleção Postman com rotas atualizadas: perfis separados (criar/editar/listar/buscar por id e por nome), Auth com scripts que salvam tokens automaticamente.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -199,8 +199,8 @@
               { "key": "Authorization", "value": "{{authHeader}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
-            "url": { "raw": "{{baseUrl}}/api/v1/suspects/filter", "host": ["{{baseUrl}}"], "path": ["api","v1","suspects","filter"] },
-            "body": { "mode": "raw", "raw": "{\n  \"attributes\": [\"hair: Preto\", \"vehicle: Moto\"]\n}" }
+            "url": { "raw": "{{baseUrl}}/api/v1/cases/{{caseId}}/suspects/filter", "host": ["{{baseUrl}}"], "path": ["api","v1","cases","{{caseId}}","suspects","filter"] },
+            "body": { "mode": "raw", "raw": "{\n  \"hair_id\": 2,\n  \"vehicle_id\": 3\n}" }
           }
         }
       ]
