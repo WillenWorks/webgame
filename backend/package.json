@@ -24,6 +24,27 @@
     "nodemon": "^3.1.11",
     "prisma": "6.19.3"
   },
+  "overrides": {
+    "express": {
+      "path-to-regexp": "8.4.2",
+      "qs": "6.16.0",
+      "body-parser": "2.3.0"
+    },
+    "eslint": {
+      "js-yaml": "4.3.2",
+      "minimatch": "3.1.5",
+      "brace-expansion": "1.1.18",
+      "flatted": "3.4.4",
+      "ajv": "6.15.0",
+      "@humanfs/node": "0.16.8"
+    },
+    "nodemon": {
+      "picomatch": "2.3.2"
+    },
+    "prisma": {
+      "deepmerge-ts": "8.0.2"
+    }
+  },
   "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",

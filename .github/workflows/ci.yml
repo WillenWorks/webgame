@@ -17,14 +17,14 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      # Gate em `critical` por enquanto; apertar para `high` quando os DoS
-      # transitivos de Express/eslint forem resolvidos via overrides.
+      # Os DoS/ReDoS transitivos de Express/eslint/nuxt foram resolvidos via
+      # `overrides` nos package.json; gate apertado de `critical` para `high`.
       - name: npm audit (backend)
         working-directory: backend
-        run: npm audit --audit-level=critical
+        run: npm audit --audit-level=high
       - name: npm audit (frontend)
         working-directory: frontend
-        run: npm audit --audit-level=critical
+        run: npm audit --audit-level=high
       - name: lockfile-lint
         run: |
           npx lockfile-lint --path backend/package-lock.json --type npm --validate-https --allowed-hosts npm
