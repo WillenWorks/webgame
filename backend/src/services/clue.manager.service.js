@@ -18,9 +18,7 @@ export async function populateVillainClues(caseId) {
     { type: 'sex', value: culprit.sex, refId: null }
   ];
 
-  const inserted = await insertVillainClues(caseId, attributes);
-
-  console.log(`[ClueManager] Populated ${inserted} clues for case ${caseId}`);
+  await insertVillainClues(caseId, attributes);
 }
 
 export async function pickNextVillainClue(caseId) {

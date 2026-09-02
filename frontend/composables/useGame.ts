@@ -25,7 +25,6 @@ type Profile = {
 type TimeState = {
   current_time: string; // ISO Date
   deadline_time: string; // ISO Date
-  hours_per_day: number;
   days_remaining: number;
 };
 
@@ -94,54 +93,28 @@ type RoutesResponse = {
 };
 
 /* =========================
- *  HELPERS (contract adapters)
+ *  HELPERS
  * ========================= */
-// Janela desperta usada pelo relógio do backend (08:00–23:00 => 15h/dia)
-const AWAKE_HOURS_PER_DAY = 15;
-
 /**
- * Normaliza o `timeState` vindo do backend (`{ start_time, deadline_time,
- * current_time, daysEarly }`) para o formato consumido pelo GameClock,
- * derivando `days_remaining` / `hours_per_day` quando ausentes.
+ * Guarda de fronteira do `timeState`. O backend já entrega
+ * `{ start_time, deadline_time, current_time, daysEarly, days_remaining }` em
+ * ISO UTC; aqui só garantimos não-nulo e derivamos `days_remaining` caso ele
+ * venha ausente de alguma resposta mais antiga.
  */
 function normalizeTimeState(ts: any): TimeState | null {
-  if (!ts) return null;
-  const current_time = ts.current_time ?? ts.currentTime ?? null;
-  const deadline_time = ts.deadline_time ?? ts.deadlineTime ?? null;
+  if (!ts?.current_time || !ts?.deadline_time) return null;
 
   let days_remaining = ts.days_remaining;
-  if (days_remaining == null && current_time && deadline_time) {
-    const diffMs = new Date(deadline_time).getTime() - new Date(current_time).getTime();
+  if (days_remaining == null) {
+    const diffMs = new Date(ts.deadline_time).getTime() - new Date(ts.current_time).getTime();
     days_remaining = Number.isFinite(diffMs) ? Math.max(0, Math.ceil(diffMs / 86_400_000)) : 0;
   }
 
   return {
-    current_time,
-    deadline_time,
-    hours_per_day: ts.hours_per_day ?? AWAKE_HOURS_PER_DAY,
-    days_remaining: days_remaining ?? 0,
+    current_time: ts.current_time,
+    deadline_time: ts.deadline_time,
+    days_remaining,
   };
-}
-
-/**
- * Achata respostas de gameplay. O controller de investigação/finalização
- * devolve `{ ok, text: { text, gameOver, solved, timeState, xpEarned, repDelta } }`
- * (duplo embrulho) nos desfechos, e `{ ok, text: "<diálogo>" }` nas pistas comuns.
- * Aqui devolvemos sempre `{ ...campos, text: string }`.
- */
-function unwrapGameResponse(raw: any): GenericGameResponse {
-  if (!raw || typeof raw !== "object") return { ok: false, text: String(raw ?? "") };
-
-  const inner =
-    raw.text && typeof raw.text === "object" && !Array.isArray(raw.text) ? raw.text : null;
-
-  const flat: any = inner ? { ...raw, ...inner } : { ...raw };
-
-  if (inner && typeof inner.text === "string") flat.text = inner.text;
-  else if (typeof raw.text === "string") flat.text = raw.text;
-  else flat.text = typeof flat.text === "string" ? flat.text : "";
-
-  return flat as GenericGameResponse;
 }
 
 /* =========================
@@ -167,10 +140,8 @@ export function useGame() {
     const ts = normalizeTimeState(data?.timeState);
     if (ts) timeState.value = ts;
 
-    const isOver = data?.gameOver ?? data?.text?.gameOver ?? false;
-    if (isOver) {
-      const solved = data?.solved ?? data?.text?.solved ?? data?.win ?? false;
-      lastGameOver.value = solved ? "WIN" : "LOSE";
+    if (data?.gameOver) {
+      lastGameOver.value = data?.solved ? "WIN" : "LOSE";
     }
   };
 
@@ -267,11 +238,10 @@ export function useGame() {
   const travelToCity = async (caseId: string, cityId: string | number) => {
     isProcessingCase.value = true;
     try {
-      const raw = await fetchApi(`/cases/${caseId}/travel`, {
+      const res = await fetchApi<GenericGameResponse>(`/cases/${caseId}/travel`, {
         method: "POST",
         body: { cityId: Number(cityId) },
       });
-      const res = unwrapGameResponse(raw);
       syncGameState(res);
       return res;
     } catch (e) {
@@ -284,14 +254,13 @@ export function useGame() {
   // 6. Investigate Place
   const investigatePlace = async (caseId: string, placeId: string) => {
     try {
-      const raw = await fetchApi(
+      const data = await fetchApi<GenericGameResponse>(
         `/cases/${caseId}/investigate`,
         {
           method: "POST",
           body: { placeId },
         },
       );
-      const data = unwrapGameResponse(raw);
       syncGameState(data);
       return data;
     } catch (e) {

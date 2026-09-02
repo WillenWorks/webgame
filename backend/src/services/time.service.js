@@ -35,7 +35,6 @@ const MIN_DEADLINE_DAYS = { EASY: 7, HARD: 5, EXTREME: 3 };
 // Repositórios
 import { getCityById } from '../repositories/city.repo.js';
 import { getGameDifficultyByCode } from '../repositories/game_difficulty.repo.js';
-import { getXpRuleByDifficulty } from '../repositories/xp_rules.repo.js';
 import { getTravelOverrideMinutes } from '../repositories/travel_overrides.repo.js';
 import { upsertCaseTimeState, getCaseTimeState } from '../repositories/case_time_state.repo.js';
 import { getCaseDifficulty } from '../repositories/case.repo.js';
@@ -103,10 +102,7 @@ export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = D
   // Derivar dificuldade do próprio caso quando possível
   try {
     const code = await getCaseDifficulty(caseId);
-    if (code) {
-      difficulty = code;
-      console.log('[time] startCaseClock difficulty from case', { caseId, difficulty });
-    }
+    if (code) difficulty = code;
   } catch (err) {
     console.warn('[time] startCaseClock: falha ao ler dificuldade do caso, usando parâmetro', String(err));
   }
@@ -118,16 +114,8 @@ export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = D
     params = {
       maxFailsAllowed: Number(dbParams.max_fails_allowed ?? params.maxFailsAllowed),
       visitsBuffer: Number(dbParams.visits_buffer ?? params.visitsBuffer),
-      shortcutSkips: difficulty === 'EXTREME' ? params.shortcutSkips : params.shortcutSkips,
+      shortcutSkips: params.shortcutSkips,
     };
-  }
-
-  // (Opcional) consultar xp_rules
-  try {
-    const xpRule = await getXpRuleByDifficulty(difficulty);
-    console.log('[time] xpRule for difficulty', difficulty, xpRule);
-  } catch (e) {
-    console.warn('[time] getXpRuleByDifficulty falhou (não crítico):', String(e));
   }
 
   // Segunda 08:00 da semana corrente (TZ)
@@ -167,7 +155,8 @@ export async function startCaseClock({ caseId, difficulty = 'EASY', timezone = D
   return { startTimeISO: start.utc().toISOString(), deadlineTimeISO: deadline.utc().toISOString(), simulatedMinutes };
 }
 
-// Sumário coerente para relatórios (ISO UTC + daysEarly)
+// Sumário coerente para relatórios (ISO UTC + dias adiantados / restantes).
+// `days_remaining` vai pronto para o front (GameClock) — antes era derivado lá.
 export async function getCaseTimeSummary({ caseId, timezone = DEFAULT_TZ }) {
   const state = await getCaseTimeState(caseId);
   if (!state) throw new Error('Estado temporal do caso não encontrado');
@@ -175,10 +164,12 @@ export async function getCaseTimeSummary({ caseId, timezone = DEFAULT_TZ }) {
   const deadline = dayjs.tz(state.deadline_time, timezone).utc();
   const current  = dayjs.tz(state.current_time,  timezone).utc();
   const daysEarly = computeDaysEarly(deadline, current);
+  const days_remaining = Math.max(0, Math.ceil((deadline.valueOf() - current.valueOf()) / 86_400_000));
   return {
     start_time:    start.toISOString(),
     deadline_time: deadline.toISOString(),
     current_time:  current.toISOString(),
     daysEarly,
+    days_remaining,
   };
 }

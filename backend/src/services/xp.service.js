@@ -15,13 +15,11 @@ import { computeXpBreakdown } from '../domain/xp.rules.js';
  * - Cap de bonusSkip por dificuldade: EASY=0.15, HARD=0.18, EXTREME=0.20
  */
 export async function computeXP({ playerId, caseId, difficulty, reputationScore, performance, daysEarly = 0, placesSkippedPct = 0 }) {
-  console.log('[xp] difficulty recebido', difficulty);
   let xpRule = await getXpRuleByDifficulty(difficulty);
   if (!xpRule) {
     console.warn('[xp] xpRule não encontrada para', difficulty, '- usando EASY como fallback');
     xpRule = await getXpRuleByDifficulty('EASY');
   }
-  console.log('[xp] xpRule', xpRule);
   const mult = await getReputationMultipliers(reputationScore); // { debuff_base_factor, bonus_multiplier }
 
   const { xpFinal, breakdown } = computeXpBreakdown({
@@ -35,6 +33,5 @@ export async function computeXP({ playerId, caseId, difficulty, reputationScore,
   });
 
   await insertXpHistory({ playerId, caseId, xpAwarded: xpFinal, breakdown });
-  console.log('[xp] breakdown para insert', breakdown);
   return { xpFinal, ...breakdown };
 }
