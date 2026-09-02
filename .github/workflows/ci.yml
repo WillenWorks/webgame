@@ -5,7 +5,31 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: read
+
 jobs:
+  security:
+    name: Segurança — audit + lockfile-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      # Gate em `critical` por enquanto; apertar para `high` quando os DoS
+      # transitivos de Express/eslint forem resolvidos via overrides.
+      - name: npm audit (backend)
+        working-directory: backend
+        run: npm audit --audit-level=critical
+      - name: npm audit (frontend)
+        working-directory: frontend
+        run: npm audit --audit-level=critical
+      - name: lockfile-lint
+        run: |
+          npx lockfile-lint --path backend/package-lock.json --type npm --validate-https --allowed-hosts npm
+          npx lockfile-lint --path frontend/package-lock.json --type npm --validate-https --allowed-hosts npm
+
   backend:
     name: Backend — testes
     runs-on: ubuntu-latest
@@ -36,15 +60,19 @@ jobs:
         working-directory: backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - run: npm ci
+      # --ignore-scripts bloqueia o postinstall de todas as deps. Só estes
+      # precisam do seu: bcrypt (binário nativo) e os pacotes do Prisma
+      # (download do query engine). Allowlist explícita e justificada.
+      - run: npm ci --ignore-scripts
+      - run: npm rebuild bcrypt @prisma/engines @prisma/client prisma
       - run: npm run lint
       - run: npx prisma generate
       - run: npx prisma migrate deploy
@@ -61,9 +89,9 @@ jobs:
         working-directory: frontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
