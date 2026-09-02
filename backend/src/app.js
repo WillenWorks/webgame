@@ -3,11 +3,22 @@ import cors from 'cors';
 import helmet from 'helmet';
 
 import registerRoutes from './routes/index.js';
+import healthRoutes from './routes/health.routes.js';
 import { errorMiddleware } from './middlewares/error.middleware.js';
 import { requestIdMiddleware, rateLimitMiddleware, sanitizeMiddleware } from './middlewares/security.middleware.js';
 import { metricsMiddleware, metricsController } from './middlewares/metrics.middleware.js';
 
 const app = express();
+
+// Atrás de um proxy (Railway/AWS/Nginx) o `req.ip` é o IP do proxy — o que
+// colapsaria o rate limit num único bucket global. Defina TRUST_PROXY com o
+// número de proxies (ex.: 1) ou "true"/"loopback". Sem a variável: desligado
+// (correto para rodar local sem proxy).
+const trustProxy = process.env.TRUST_PROXY;
+if (trustProxy) {
+  const n = Number(trustProxy);
+  app.set('trust proxy', Number.isInteger(n) ? n : trustProxy === 'true' ? true : trustProxy);
+}
 
 // Request ID antes de tudo
 app.use(requestIdMiddleware);
@@ -43,6 +54,9 @@ app.use(metricsMiddleware);
 
 // Endpoint de métricas Prometheus
 app.get('/metrics', metricsController);
+
+// Healthchecks (liveness /ping + readiness /health com status do PostgreSQL)
+app.use('/', healthRoutes);
 
 // Rotas
 registerRoutes(app);

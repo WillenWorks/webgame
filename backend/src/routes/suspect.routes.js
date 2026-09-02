@@ -2,10 +2,16 @@ import { z } from 'zod';
 import { validateBody, validateParams, validateQuery, zId } from '../middlewares/validate.middleware.js';
 import { Router } from 'express';
 import { filterSuspectsService } from '../services/suspect_filter.service.js';
+import { authMiddleware } from '../middlewares/auth.middleware.js';
+import { listCaseAttributesController } from '../controllers/suspect.controller.js';
 
 const router = Router();
+router.use(authMiddleware);
 
 const caseIdParams = z.object({ caseId: zId });
+
+// GET /cases/:caseId/suspects/attributes → opções de atributo da pool deste caso
+router.get('/:caseId/suspects/attributes', validateParams(caseIdParams), listCaseAttributesController);
 const filterSchema = z.object({
   sex_id: z.coerce.number().optional(),
   hair_id: z.coerce.number().optional(),

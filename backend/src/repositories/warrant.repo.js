@@ -1,79 +1,58 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
+import { toCaseRow } from './case.repo.js';
 
 export async function getCaseById(caseId) {
-  const [rows] = await pool.execute(
-    "SELECT * FROM active_cases WHERE id = ?",
-    [caseId]
-  );
-  return rows[0];
+  return toCaseRow(await prisma.activeCase.findUnique({ where: { id: caseId } }));
 }
 
 export async function getSuspectById(caseId, suspectId) {
-  const [rows] = await pool.execute(
-    `
-    SELECT *
-    FROM case_suspect_pool
-    WHERE id = ? AND case_id = ?
-    `,
-    [suspectId, caseId]
-  );
-  return rows[0];
+  const s = await prisma.caseSuspect.findFirst({
+    where: { id: suspectId, caseId },
+  });
+  if (!s) return undefined;
+  return {
+    id: s.id,
+    case_id: s.caseId,
+    name: s.name,
+    sex_id: s.sexId,
+    hair_id: s.hairId,
+    hobby_id: s.hobbyId,
+    vehicle_id: s.vehicleId,
+    feature_id: s.featureId,
+    is_culprit: s.isCulprit,
+  };
 }
 
 export async function getFinalCityByCase(caseId) {
-  const [rows] = await pool.execute(
-    `
-    SELECT city_id
-    FROM case_route
-    WHERE active_case_id = ?
-    ORDER BY step_order DESC
-    LIMIT 1
-    `,
-    [caseId]
-  );
-  return rows[0];
+  const row = await prisma.caseRoute.findFirst({
+    where: { activeCaseId: caseId },
+    orderBy: { stepOrder: 'desc' },
+  });
+  if (!row) return undefined;
+  return { city_id: row.cityId };
 }
 
 export async function markWarrant(caseId, suspectId) {
-  await pool.execute(
-    `
-    UPDATE active_cases
-    SET warrant_suspect_id = ?
-    WHERE id = ?
-    `,
-    [suspectId, caseId]
-  );
+  await prisma.activeCase.update({
+    where: { id: caseId },
+    data: { warrantSuspectId: suspectId },
+  });
 }
 
 export async function solveCase(caseId, status) {
-  await pool.execute(
-    `
-    UPDATE active_cases
-    SET status = ?
-    WHERE id = ?
-    `,
-    [status, caseId]
-  );
+  await prisma.activeCase.update({
+    where: { id: caseId },
+    data: { status },
+  });
 }
 
 export async function clearSuspects(caseId) {
-  await pool.execute(
-    `
-    DELETE FROM case_suspect_pool
-    WHERE case_id = ?
-    `,
-    [caseId]
-  );
+  await prisma.caseSuspect.deleteMany({ where: { caseId } });
 }
 
-// Novo: preencher capture_place_id ao efetuar prisão
 export async function setCapturePlace(caseId, placeId) {
-  await pool.execute(
-    `
-    UPDATE active_cases
-    SET capture_place_id = ?
-    WHERE id = ?
-    `,
-    [placeId, caseId]
-  );
+  await prisma.activeCase.update({
+    where: { id: caseId },
+    data: { capturePlaceId: placeId },
+  });
 }

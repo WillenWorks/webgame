@@ -25,6 +25,26 @@ h1, h2, h3 {
   @apply inline-flex items-center justify-center bg-amber-400 text-slate-950 font-display text-xs px-6 py-3 uppercase cursor-pointer shadow-[4px_4px_0_rgba(0,0,0,0.5)] transition-transform active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_rgba(0,0,0,0.5)];
 }
 
+.retro-btn:focus-visible {
+  @apply outline-none ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950;
+}
+
+.retro-btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Overlay de scanlines CRT reutilizável (antes duplicado por página) */
+.bg-scanlines {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.2) 50%,
+    rgba(0, 0, 0, 0.2)
+  );
+  background-size: 100% 4px;
+}
+
 /* Page Transitions */
 .page-enter-active,
 .page-leave-active {
@@ -36,4 +56,16 @@ h1, h2, h3 {
   opacity: 0;
   filter: blur(8px);
   transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active,
+  .page-leave-active {
+    transition: opacity 0.15s linear;
+  }
+  .page-enter-from,
+  .page-leave-to {
+    filter: none;
+    transform: none;
+  }
 }

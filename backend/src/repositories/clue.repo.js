@@ -1,15 +1,28 @@
-import pool from '../config/database.js';
+import { randomUUID } from 'crypto';
+import prisma from '../config/prisma.js';
+
+const int = (v) => (v == null ? v : Number(v));
+
+function toClue(c) {
+  if (!c) return undefined;
+  return {
+    id: c.id,
+    case_id: c.caseId,
+    city_place_id: c.cityPlaceId,
+    clue_type: c.clueType,
+    target_type: c.targetType,
+    target_value: c.targetValue,
+    target_ref_id: c.targetRefId,
+    generated_text: c.generatedText,
+    revealed: c.revealed,
+    created_at: c.createdAt,
+  };
+}
 
 export async function getExistingClueByCityPlace(caseId, cityPlaceId) {
-  const sql = `
-    SELECT *
-    FROM case_clues
-    WHERE case_id = ?
-      AND city_place_id = ?
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, cityPlaceId]);
-  return rows[0];
+  return toClue(
+    await prisma.caseClue.findFirst({ where: { caseId, cityPlaceId } })
+  );
 }
 
 export async function insertClue({
@@ -23,66 +36,106 @@ export async function insertClue({
   generatedText,
   revealed = 0,
 }) {
-  const sql = `
-    INSERT INTO case_clues
-      (id, case_id, city_place_id, clue_type, target_type, target_value, target_ref_id, generated_text, revealed)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-  await pool.execute(sql, [
-    id,
-    caseId,
-    cityPlaceId,
-    clueType,
-    targetType,
-    targetValue,
-    targetRefId ?? null,
-    generatedText,
-    revealed,
-  ]);
+  await prisma.caseClue.create({
+    data: {
+      id,
+      caseId,
+      cityPlaceId,
+      clueType,
+      targetType,
+      targetValue: targetValue ?? null,
+      targetRefId: targetRefId ?? null,
+      generatedText,
+      revealed: Boolean(revealed),
+    },
+  });
 }
 
 export async function getRevealedCluesByCityId(caseId) {
-  const sql = `
-    SELECT cc.*
-    FROM case_clues cc
-    JOIN case_city_places ccp ON ccp.id = cc.city_place_id
-    WHERE cc.case_id = ?
-      AND cc.revealed = 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId]);
-  return rows;
+  const rows = await prisma.caseClue.findMany({
+    where: { caseId, revealed: true },
+  });
+  return rows.map(toClue);
 }
 
 export async function countRevealedCluesInCity(caseId, cityId) {
-  const sql = `
-    SELECT COUNT(*) as count
-    FROM case_clues cc
-    JOIN case_city_places ccp ON ccp.id = cc.city_place_id
-    WHERE cc.case_id = ?
-      AND ccp.city_id = ?
-      AND cc.revealed = 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, cityId]);
-  return rows[0].count;
+  return prisma.caseClue.count({
+    where: { caseId, revealed: true, cityPlace: { cityId: int(cityId) } },
+  });
+}
+
+export async function countCluesForCase(caseId) {
+  return prisma.caseClue.count({ where: { caseId } });
 }
 
 export async function getCluesByCaseAndCity(caseId, cityId) {
-  const sql = `
-    SELECT cc.*
-    FROM case_clues cc
-    JOIN case_city_places ccp ON ccp.id = cc.city_place_id
-    WHERE cc.case_id = ?
-      AND ccp.city_id = ?
-  `;
-  const [rows] = await pool.execute(sql, [caseId, cityId]);
-  return rows;
+  const rows = await prisma.caseClue.findMany({
+    where: { caseId, cityPlace: { cityId: int(cityId) } },
+  });
+  return rows.map(toClue);
 }
 
 export async function updateClueRevealedStatus(clueId, revealed) {
-  const sql = `
-    UPDATE case_clues
-    SET revealed = ?
-    WHERE id = ?
-  `;
-  await pool.execute(sql, [revealed ? 1 : 0, clueId]);
-} 
+  await prisma.caseClue.update({
+    where: { id: clueId },
+    data: { revealed: Boolean(revealed) },
+  });
+}
+
+function toVillainClue(v) {
+  if (!v) return null;
+  return {
+    id: v.id,
+    active_case_id: v.activeCaseId,
+    attribute_type: v.attributeType,
+    attribute_value: v.attributeValue,
+    target_ref_id: v.targetRefId,
+    is_revealed: v.isRevealed,
+  };
+}
+
+export async function insertVillainClues(caseId, attributes) {
+  const data = attributes
+    .filter((a) => a.value)
+    .map((a) => ({
+      id: randomUUID(),
+      activeCaseId: caseId,
+      attributeType: a.type,
+      attributeValue: a.value,
+      targetRefId: a.refId ?? null,
+    }));
+  if (data.length === 0) return 0;
+  const result = await prisma.caseVillainClue.createMany({ data });
+  return result.count;
+}
+
+export async function pickUnrevealedVillainClue(caseId) {
+  const count = await prisma.caseVillainClue.count({
+    where: { activeCaseId: caseId, isRevealed: false },
+  });
+  if (count === 0) return null;
+  const skip = Math.floor(Math.random() * count);
+  const row = await prisma.caseVillainClue.findFirst({
+    where: { activeCaseId: caseId, isRevealed: false },
+    skip,
+  });
+  return toVillainClue(row);
+}
+
+export async function pickAnyVillainClue(caseId) {
+  const count = await prisma.caseVillainClue.count({ where: { activeCaseId: caseId } });
+  if (count === 0) return null;
+  const skip = Math.floor(Math.random() * count);
+  const row = await prisma.caseVillainClue.findFirst({
+    where: { activeCaseId: caseId },
+    skip,
+  });
+  return toVillainClue(row);
+}
+
+export async function markVillainClueRevealed(id) {
+  await prisma.caseVillainClue.update({
+    where: { id },
+    data: { isRevealed: true },
+  });
+}

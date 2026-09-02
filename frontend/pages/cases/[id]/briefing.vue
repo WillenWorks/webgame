@@ -35,25 +35,17 @@
 
             <div class="space-y-4 w-full">
               <h2 class="text-2xl text-white font-display uppercase">
-                OBJETO: <span class="text-cyan-400">{{ currentCase?.case?.stolen_object || 'DESCONHECIDO' }}</span>
+                OBJETO: <span class="text-cyan-400">{{ stolenObject }}</span>
               </h2>
-              
-              <div class="font-mono text-sm leading-relaxed text-slate-300 typing-effect">
-                <p>AGENTE,</p>
-                <br>
-                <p>
-                  {{ currentCase?.case?.intro_text || 'Recebemos informações de que um item valioso foi roubado. Sua missão é rastrear o ladrão, recuperar o objeto e prendê-lo antes que ele desapareça.' }}
-                </p>
-                <br>
-                <p>
-                  O tempo é essencial. Você tem <span class="text-red-400">{{ currentCase?.case?.time_limit_hours || 168 }} HORAS</span>.
-                </p>
-                <p>
-                  A reputação da Agência está em suas mãos.
-                </p>
-                <br>
-                <p class="text-amber-500">BOA SORTE.</p>
-              </div>
+
+              <TypewriterText
+                ref="typewriterRef"
+                :text="briefingText"
+                :speed="16"
+                sound
+                class="block font-mono text-sm leading-relaxed text-slate-300 cursor-pointer"
+                @click="typewriterRef?.skip?.()"
+              />
             </div>
           </div>
         </div>
@@ -71,32 +63,42 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useGame } from '~/composables/useGame'
+import { useSfx } from '~/composables/useSfx'
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
+import TypewriterText from '~/components/ui/TypewriterText.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { fetchAvailableCases, cases } = useGame()
+const { fetchActiveCase, cases } = useGame()
+const sfx = useSfx()
+
 const loading = ref(true)
 const currentCase = ref(null)
+const typewriterRef = ref(null)
+
+const stolenObject = computed(() => currentCase.value?.stolen_object || 'DESCONHECIDO')
+
+const briefingText = computed(() => {
+  const intro = currentCase.value?.intro_text
+    || 'Recebemos informações de que um item valioso foi roubado. Sua missão é rastrear o ladrão, recuperar o objeto e prendê-lo antes que ele desapareça.'
+  const hours = currentCase.value?.time_limit_hours || 168
+  return `AGENTE,\n\n${intro}\n\nO tempo é essencial. Você tem ${hours} HORAS.\nA reputação da Agência está em suas mãos.\n\nBOA SORTE.`
+})
 
 onMounted(async () => {
   const caseId = route.params.id
-  const activeCase = await fetchAvailableCases();
-  currentCase.value = (activeCase?.case?.id === caseId) ? activeCase : cases.value[0]
+  const active = await fetchActiveCase()
+  const fromActive = String(active?.case?.id ?? '') === String(caseId) ? active.case : null
+  currentCase.value = fromActive || cases.value[0] || null
   loading.value = false
 })
 
 const acceptMission = () => {
+  sfx.confirm()
   router.push(`/cases/${route.params.id}/map`)
 }
 </script>
-
-<style scoped>
-.typing-effect {
-  white-space: pre-wrap;
-}
-</style>

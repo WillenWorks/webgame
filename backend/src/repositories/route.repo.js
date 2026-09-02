@@ -1,144 +1,145 @@
-import pool from "../config/database.js";
+import prisma from '../config/prisma.js';
+
+const int = (v) => (v == null ? v : Number(v));
+
+function parseJson(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
 
 export async function insertRouteStep({ activeCaseId, cityId, stepOrder, optionsJson = null }) {
-  const sql = `
-    INSERT INTO case_route (active_case_id, city_id, step_order, clues_generated_json)
-    VALUES (?, ?, ?, ?)
-  `;
-  await pool.execute(sql, [activeCaseId, cityId, stepOrder, optionsJson]);
+  await prisma.caseRoute.create({
+    data: {
+      activeCaseId,
+      cityId: int(cityId),
+      stepOrder: int(stepOrder),
+      cluesGeneratedJson: parseJson(optionsJson),
+    },
+  });
 }
 
 export async function getRouteByCaseId(activeCaseId) {
-  const sql = `
-    SELECT 
-      cr.step_order,
-      c.id AS city_id,
-      c.name AS city_name,
-      co.name AS country_name,
-      cr.clues_generated_json
-    FROM case_route cr
-    JOIN cities c ON c.id = cr.city_id
-    JOIN countries co ON co.id = c.country_id
-    WHERE cr.active_case_id = ?
-    ORDER BY cr.step_order ASC
-  `;
-  const [rows] = await pool.execute(sql, [activeCaseId]);
-  return rows;
+  const rows = await prisma.caseRoute.findMany({
+    where: { activeCaseId },
+    include: { city: { include: { country: true } } },
+    orderBy: { stepOrder: 'asc' },
+  });
+  return rows.map((r) => ({
+    step_order: r.stepOrder,
+    city_id: r.cityId,
+    city_name: r.city.name,
+    country_name: r.city.country.name,
+    clues_generated_json: r.cluesGeneratedJson,
+  }));
 }
 
 export async function deleteRouteByCaseId(activeCaseId) {
-  const sql = `
-    DELETE FROM case_route
-    WHERE active_case_id = ?
-  `;
-  await pool.execute(sql, [activeCaseId]);
+  await prisma.caseRoute.deleteMany({ where: { activeCaseId } });
 }
 
 export async function getCaseCityPlace(caseId, cityId, placeTypeId) {
-  const sql = `
-    SELECT
-      cp.place_type_id,
-      cp.clue_type,
-      pt.interaction_style
-    FROM case_city_places cp
-    JOIN place_types pt ON pt.id = cp.place_type_id
-    WHERE cp.case_id = ?
-      AND cp.city_id = ?
-      ${placeTypeId ? 'AND cp.place_type_id = ?' : ''}
-    LIMIT 1
-  `;
-  const params = placeTypeId ? [caseId, cityId, placeTypeId] : [caseId, cityId];
-  const [rows] = await pool.execute(sql, params);
-  return rows[0];
+  const row = await prisma.caseCityPlace.findFirst({
+    where: {
+      caseId,
+      cityId: int(cityId),
+      ...(placeTypeId ? { placeTypeId: int(placeTypeId) } : {}),
+    },
+    include: { placeType: true, cityPlace: true },
+  });
+  if (!row) return undefined;
+  return {
+    place_type_id: row.placeTypeId,
+    city_place_id: row.cityPlaceId,
+    clue_type: row.clueType,
+    interaction_style:
+      row.cityPlace?.interactionStyle ??
+      row.placeType?.interactionStyle ??
+      'Testemunha reticente, de poucas palavras.',
+  };
 }
 
 export async function getNextCityByCase(caseId, currentStep) {
-  const sql = `
-    SELECT
-      cr.step_order,
-      c.id AS city_id,
-      c.name AS city_name,
-      co.id AS country_id,
-      co.name AS country_name,
-      co.cultural_info,
-      cr.clues_generated_json
-    FROM case_route cr
-    JOIN cities c ON c.id = cr.city_id
-    JOIN countries co ON co.id = c.country_id
-    WHERE cr.active_case_id = ?
-      AND cr.step_order = ?
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, currentStep + 1]);
-  return rows[0];
+  const row = await prisma.caseRoute.findUnique({
+    where: {
+      activeCaseId_stepOrder: { activeCaseId: caseId, stepOrder: int(currentStep) + 1 },
+    },
+    include: { city: { include: { country: true } } },
+  });
+  if (!row) return undefined;
+  return {
+    step_order: row.stepOrder,
+    city_id: row.cityId,
+    city_name: row.city.name,
+    country_id: row.city.countryId,
+    country_name: row.city.country.name,
+    cultural_info: row.city.country.culturalInfo,
+    description_prompt: row.city.descriptionPrompt,
+    clues_generated_json: row.cluesGeneratedJson,
+  };
 }
 
 export async function getCurrentRouteStep(caseId) {
-  const sql = `
-    SELECT
-      cr.step_order,
-      cr.city_id
-    FROM case_route cr
-    WHERE cr.active_case_id = ?
-      AND cr.visited = FALSE
-    ORDER BY cr.step_order ASC
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId]);
-  return rows[0];
+  const row = await prisma.caseRoute.findFirst({
+    where: { activeCaseId: caseId, visited: false },
+    orderBy: { stepOrder: 'asc' },
+  });
+  if (!row) return undefined;
+  return { step_order: row.stepOrder, city_id: row.cityId };
 }
 
 export async function markRouteStepVisited(caseId, stepOrder) {
-  const sql = `
-    UPDATE case_route
-    SET visited = TRUE
-    WHERE active_case_id = ?
-      AND step_order = ?
-  `;
-  await pool.execute(sql, [caseId, stepOrder]);
+  await prisma.caseRoute.update({
+    where: { activeCaseId_stepOrder: { activeCaseId: caseId, stepOrder: int(stepOrder) } },
+    data: { visited: true },
+  });
 }
 
 export async function getNextRouteCity(caseId, stepOrder) {
-  const sql = `
-    SELECT city_id
-    FROM case_route
-    WHERE active_case_id = ?
-      AND step_order = ?
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, stepOrder + 1]);
-  return rows[0];
+  const row = await prisma.caseRoute.findUnique({
+    where: {
+      activeCaseId_stepOrder: { activeCaseId: caseId, stepOrder: int(stepOrder) + 1 },
+    },
+  });
+  if (!row) return undefined;
+  return { city_id: row.cityId };
 }
 
 export async function getRouteSteps(caseId) {
-  const sql = `
-    SELECT 
-      cr.step_order,
-      cr.city_id,
-      cr.clues_generated_json
-    FROM case_route cr
-    WHERE cr.active_case_id = ?
-    ORDER BY cr.step_order ASC
-  `;
-  const [rows] = await pool.execute(sql, [caseId]);
-  return rows;
+  const rows = await prisma.caseRoute.findMany({
+    where: { activeCaseId: caseId },
+    orderBy: { stepOrder: 'asc' },
+  });
+  return rows.map((r) => ({
+    step_order: r.stepOrder,
+    city_id: r.cityId,
+    clues_generated_json: r.cluesGeneratedJson,
+  }));
+}
+
+export async function countRoutesForCase(caseId) {
+  return prisma.caseRoute.count({ where: { activeCaseId: caseId } });
+}
+
+export async function getCaseProfileInfo(caseId) {
+  const c = await prisma.activeCase.findUnique({
+    where: { id: caseId },
+    select: { profileId: true },
+  });
+  if (!c) return null;
+  return { profile_id: c.profileId };
 }
 
 export async function getStepOptions(caseId, stepOrder) {
-  const sql = `
-    SELECT clues_generated_json
-    FROM case_route
-    WHERE active_case_id = ? AND step_order = ?
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [caseId, stepOrder]);
-  if (!rows[0] || !rows[0].clues_generated_json) return null;
-  try {
-    const json = typeof rows[0].clues_generated_json === 'string'
-      ? JSON.parse(rows[0].clues_generated_json)
-      : rows[0].clues_generated_json;
-    return json;
-  } catch {
-    return null;
-  }
+  const row = await prisma.caseRoute.findUnique({
+    where: { activeCaseId_stepOrder: { activeCaseId: caseId, stepOrder: int(stepOrder) } },
+  });
+  if (!row || !row.cluesGeneratedJson) return null;
+  return parseJson(row.cluesGeneratedJson);
 }

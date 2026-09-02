@@ -1,0 +1,606 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Operação Mundo — Prisma Schema (PostgreSQL)
+//
+// Modelagem 100% normalizada do domínio do jogo (Carmen Sandiego MVP).
+// Convenção: modelos em PascalCase, colunas em camelCase mapeadas via @map para
+// os nomes snake_case já usados no restante do backend (@@map nas tabelas).
+//
+// Coordenadas de cidade são `latitude`/`longitude` (Float) — substitui o antigo
+// `POINT`/`ST_X/ST_Y` do MySQL, permitindo consultas 100% via Prisma Client.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum CaseStatus {
+  ACTIVE
+  SOLVED
+  FAILED
+}
+
+enum Difficulty {
+  EASY
+  HARD
+  EXTREME
+}
+
+enum ClueType {
+  NEXT_LOCATION
+  VILLAIN
+  WARNING
+  CAPTURE
+  VILLAIN_ATTRIBUTE
+}
+
+enum CityPlaceKind {
+  LANDMARK
+  GENERIC
+}
+
+// ── Autenticação & Perfil ────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  profiles      Profile[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime? @map("expires_at")
+  revoked   Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_refresh_tokens")
+}
+
+model Rank {
+  id                    Int     @id @default(autoincrement())
+  title                 String
+  minXp                 Int     @default(0) @map("min_xp")
+  maxXp                 Int?    @map("max_xp")
+  missionSelectUnlocked Boolean @default(false) @map("mission_select_unlocked")
+  difficultyModifier    Decimal @default(1.00) @map("difficulty_modifier") @db.Decimal(4, 2)
+
+  profiles     Profile[]
+  statsHistory ProfileStatsHistory[]
+
+  @@map("ranks")
+}
+
+model Profile {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  detectiveName   String   @unique @map("detective_name")
+  rankId          Int?     @map("rank_id")
+  xp              Int      @default(0)
+  reputationScore Int      @default(0) @map("reputation_score")
+  casesSolved     Int      @default(0) @map("cases_solved")
+  casesFailed     Int      @default(0) @map("cases_failed")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rank Rank? @relation(fields: [rankId], references: [id])
+
+  cases             ActiveCase[]
+  performances      CasePerformance[]
+  dossierNotes      CaseDossierNote[]
+  capturedLog       CapturedVillainLog[]
+  reputations       PlayerReputation[]
+  reputationHistory PlayerReputationHistory[]
+  xpHistory         PlayerXpHistory[]
+  statsHistory      ProfileStatsHistory[]
+
+  @@index([userId])
+  @@map("profiles")
+}
+
+// ── Regras de jogo (dificuldade, XP, reputação) ──────────────────────────────
+
+model GameDifficulty {
+  id              Int        @id @default(autoincrement())
+  code            Difficulty @unique
+  maxFailsAllowed Int        @default(0) @map("max_fails_allowed")
+  visitsBuffer    Int        @default(0) @map("visits_buffer")
+
+  cases   ActiveCase[]
+  xpRules XpRule[]
+
+  @@map("game_difficulty")
+}
+
+model XpRule {
+  id                  Int     @id @default(autoincrement())
+  difficultyId        Int     @map("difficulty_id")
+  xpBase              Int     @map("xp_base")
+  bonusTimeFactor     Decimal @default(1.0) @map("bonus_time_factor") @db.Decimal(6, 3)
+  bonusPrecision      Int     @default(0) @map("bonus_precision")
+  debuffFailureFactor Decimal @default(1.0) @map("debuff_failure_factor") @db.Decimal(6, 3)
+
+  difficulty GameDifficulty @relation(fields: [difficultyId], references: [id], onDelete: Cascade)
+
+  @@unique([difficultyId])
+  @@map("xp_rules")
+}
+
+model ReputationRule {
+  id               Int     @id @default(autoincrement())
+  minRep           Int     @map("min_rep")
+  maxRep           Int     @map("max_rep")
+  debuffBaseFactor Decimal @default(1.0) @map("debuff_base_factor") @db.Decimal(6, 3)
+  bonusMultiplier  Decimal @default(1.0) @map("bonus_multiplier") @db.Decimal(6, 3)
+
+  @@map("reputation_rules")
+}
+
+// ── Mundo (regiões, países, cidades, tempos de viagem) ───────────────────────
+
+model Region {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  countries Country[]
+
+  @@map("regions")
+}
+
+model Country {
+  id           Int     @id @default(autoincrement())
+  name         String  @unique
+  regionId     Int?    @map("region_id")
+  culturalInfo String? @map("cultural_info")
+
+  region        Region?           @relation(fields: [regionId], references: [id])
+  cities        City[]
+  neighborsFrom CountryNeighbor[] @relation("CountryNeighborsFrom")
+  neighborsTo   CountryNeighbor[] @relation("CountryNeighborsTo")
+
+  @@index([regionId])
+  @@map("countries")
+}
+
+model CountryNeighbor {
+  countryId         Int @map("country_id")
+  neighborCountryId Int @map("neighbor_country_id")
+
+  country  Country @relation("CountryNeighborsFrom", fields: [countryId], references: [id], onDelete: Cascade)
+  neighbor Country @relation("CountryNeighborsTo", fields: [neighborCountryId], references: [id], onDelete: Cascade)
+
+  @@id([countryId, neighborCountryId])
+  @@index([neighborCountryId])
+  @@map("country_neighbors")
+}
+
+model City {
+  id                Int     @id @default(autoincrement())
+  name              String
+  countryId         Int     @map("country_id")
+  latitude          Float
+  longitude         Float
+  descriptionPrompt String? @map("description_prompt")
+  imageUrl          String? @map("image_url")
+
+  country             Country              @relation(fields: [countryId], references: [id])
+  routeSteps          CaseRoute[]
+  currentViews        CaseCurrentView[]
+  cityPlaces          CaseCityPlace[]
+  placeCatalog        CityPlace[]
+  travelLogsFrom      CaseTravelLog[]      @relation("TravelLogFrom")
+  travelLogsTo        CaseTravelLog[]      @relation("TravelLogTo")
+  travelOverridesFrom TravelTimeOverride[] @relation("TravelOverrideFrom")
+  travelOverridesTo   TravelTimeOverride[] @relation("TravelOverrideTo")
+
+  @@index([countryId])
+  @@map("cities")
+}
+
+model TravelTimeOverride {
+  fromCityId Int @map("from_city_id")
+  toCityId   Int @map("to_city_id")
+  minutes    Int
+
+  fromCity City @relation("TravelOverrideFrom", fields: [fromCityId], references: [id], onDelete: Cascade)
+  toCity   City @relation("TravelOverrideTo", fields: [toCityId], references: [id], onDelete: Cascade)
+
+  @@id([fromCityId, toCityId])
+  @@index([toCityId])
+  @@map("travel_time_overrides")
+}
+
+// ── Atributos de suspeitos (pools reutilizáveis) ─────────────────────────────
+
+model AttrSex {
+  id           Int               @id @default(autoincrement())
+  name         String            @unique
+  suspects     CaseSuspect[]
+  dossierNotes CaseDossierNote[]
+
+  @@map("attr_sex")
+}
+
+model AttrHair {
+  id           Int               @id @default(autoincrement())
+  name         String            @unique
+  suspects     CaseSuspect[]
+  dossierNotes CaseDossierNote[]
+
+  @@map("attr_hair")
+}
+
+model AttrHobby {
+  id           Int               @id @default(autoincrement())
+  name         String            @unique
+  suspects     CaseSuspect[]
+  dossierNotes CaseDossierNote[]
+
+  @@map("attr_hobby")
+}
+
+model AttrVehicle {
+  id           Int               @id @default(autoincrement())
+  name         String            @unique
+  suspects     CaseSuspect[]
+  dossierNotes CaseDossierNote[]
+
+  @@map("attr_vehicle")
+}
+
+model AttrFeature {
+  id           Int               @id @default(autoincrement())
+  name         String            @unique
+  suspects     CaseSuspect[]
+  dossierNotes CaseDossierNote[]
+
+  @@map("attr_feature")
+}
+
+// ── Caso ativo e suas ramificações ──────────────────────────────────────────
+
+model ActiveCase {
+  id               String     @id @default(uuid())
+  profileId        String     @map("profile_id")
+  stolenObject     String?    @map("stolen_object")
+  introText        String?    @map("intro_text")
+  startTime        DateTime?  @map("start_time")
+  timeLimitHours   Int?       @map("time_limit_hours")
+  difficultyId     Int        @map("difficulty_id")
+  status           CaseStatus @default(ACTIVE)
+  warrantSuspectId String?    @map("warrant_suspect_id")
+  capturePlaceId   String?    @map("capture_place_id")
+  createdAt        DateTime   @default(now()) @map("created_at")
+
+  profile        Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  difficulty     GameDifficulty @relation(fields: [difficultyId], references: [id])
+  warrantSuspect CaseSuspect?   @relation("CaseWarrantSuspect", fields: [warrantSuspectId], references: [id])
+
+  route             CaseRoute[]
+  timeState         CaseTimeState?
+  currentViews      CaseCurrentView[]
+  travelLogs        CaseTravelLog[]
+  performance       CasePerformance[]
+  suspects          CaseSuspect[]             @relation("CaseSuspects")
+  clues             CaseClue[]
+  cityPlaces        CaseCityPlace[]
+  villainClues      CaseVillainClue[]
+  dossierNotes      CaseDossierNote[]
+  capturedLog       CapturedVillainLog[]
+  reputations       PlayerReputation[]
+  reputationHistory PlayerReputationHistory[]
+  xpHistory         PlayerXpHistory[]
+  statsHistory      ProfileStatsHistory[]
+
+  @@index([profileId])
+  @@index([profileId, status])
+  @@map("active_cases")
+}
+
+model CaseRoute {
+  activeCaseId       String  @map("active_case_id")
+  cityId             Int     @map("city_id")
+  stepOrder          Int     @map("step_order")
+  cluesGeneratedJson Json?   @map("clues_generated_json")
+  visited            Boolean @default(false)
+
+  case ActiveCase @relation(fields: [activeCaseId], references: [id], onDelete: Cascade)
+  city City       @relation(fields: [cityId], references: [id])
+
+  @@id([activeCaseId, stepOrder])
+  @@index([cityId])
+  @@map("case_route")
+}
+
+model CaseTimeState {
+  caseId       String   @id @map("case_id")
+  startTime    DateTime @map("start_time")
+  deadlineTime DateTime @map("deadline_time")
+  currentTime  DateTime @map("current_time")
+  timezone     String   @default("UTC")
+
+  case ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("case_time_state")
+}
+
+model CaseCurrentView {
+  id        String   @id @default(uuid())
+  caseId    String   @map("case_id")
+  cityId    Int      @map("city_id")
+  stepOrder Int      @map("step_order")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  case ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  city City       @relation(fields: [cityId], references: [id])
+
+  @@index([caseId, stepOrder])
+  @@map("case_current_view")
+}
+
+model CaseTravelLog {
+  id           String    @id @default(uuid())
+  activeCaseId String    @map("active_case_id")
+  fromCityId   Int       @map("from_city_id")
+  toCityId     Int       @map("to_city_id")
+  stepOrder    Int       @map("step_order")
+  success      Boolean   @default(false)
+  reason       String?
+  arrivalTime  DateTime? @map("arrival_time")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  case     ActiveCase @relation(fields: [activeCaseId], references: [id], onDelete: Cascade)
+  fromCity City       @relation("TravelLogFrom", fields: [fromCityId], references: [id])
+  toCity   City       @relation("TravelLogTo", fields: [toCityId], references: [id])
+
+  @@index([activeCaseId])
+  @@map("case_travel_log")
+}
+
+model CasePerformance {
+  id                     String   @id @default(uuid())
+  caseId                 String   @map("case_id")
+  profileId              String   @map("profile_id")
+  difficultyCode         Int      @map("difficulty_code")
+  visitsCount            Int      @default(0) @map("visits_count")
+  routeErrors            Int      @default(0) @map("route_errors")
+  finishedEarlierMinutes Int      @default(0) @map("finished_earlier_minutes")
+  perfectPrecision       Boolean  @default(false) @map("perfect_precision")
+  xpAwarded              Int      @default(0) @map("xp_awarded")
+  reputationDelta        Int      @default(0) @map("reputation_delta")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  case    ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  profile Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@map("case_performance")
+}
+
+// ── Suspeitos e pistas ──────────────────────────────────────────────────────
+
+model CaseSuspect {
+  id        String  @id @default(uuid())
+  caseId    String  @map("case_id")
+  name      String
+  sexId     Int     @map("sex_id")
+  hairId    Int     @map("hair_id")
+  hobbyId   Int     @map("hobby_id")
+  vehicleId Int     @map("vehicle_id")
+  featureId Int     @map("feature_id")
+  isCulprit Boolean @default(false) @map("is_culprit")
+
+  case            ActiveCase   @relation("CaseSuspects", fields: [caseId], references: [id], onDelete: Cascade)
+  warrantForCases ActiveCase[] @relation("CaseWarrantSuspect")
+  sex             AttrSex      @relation(fields: [sexId], references: [id])
+  hair            AttrHair     @relation(fields: [hairId], references: [id])
+  hobby           AttrHobby    @relation(fields: [hobbyId], references: [id])
+  vehicle         AttrVehicle  @relation(fields: [vehicleId], references: [id])
+  feature         AttrFeature  @relation(fields: [featureId], references: [id])
+
+  @@index([caseId])
+  @@index([caseId, isCulprit])
+  @@map("case_suspect_pool")
+}
+
+model PlaceType {
+  id               Int    @id @default(autoincrement())
+  name             String
+  interactionStyle String @map("interaction_style")
+
+  cityPlaces CaseCityPlace[]
+
+  @@map("place_types")
+}
+
+// Catálogo de localidades por cidade: marcos de enredo (LANDMARK) e locais
+// cívicos genéricos (GENERIC). O gerador de caso sorteia daqui, respeitando o
+// mix da dificuldade (`config/game.rules.js`).
+model CityPlace {
+  id               Int           @id @default(autoincrement())
+  cityId           Int           @map("city_id")
+  name             String
+  kind             CityPlaceKind @default(GENERIC)
+  interactionStyle String        @map("interaction_style")
+
+  city       City            @relation(fields: [cityId], references: [id])
+  cityPlaces CaseCityPlace[]
+
+  @@unique([cityId, name])
+  @@index([cityId])
+  @@map("city_places")
+}
+
+model CaseCityPlace {
+  id                String   @id @default(uuid())
+  caseId            String   @map("case_id")
+  cityId            Int      @map("city_id")
+  placeTypeId       Int?     @map("place_type_id")
+  cityPlaceId       Int?     @map("city_place_id")
+  clueType          ClueType @map("clue_type")
+  isCaptureLocation Boolean  @default(false) @map("is_capture_location")
+
+  case      ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  city      City       @relation(fields: [cityId], references: [id])
+  placeType PlaceType? @relation(fields: [placeTypeId], references: [id])
+  cityPlace CityPlace? @relation(fields: [cityPlaceId], references: [id])
+  clues     CaseClue[]
+
+  @@index([caseId, cityId])
+  @@map("case_city_places")
+}
+
+model CaseClue {
+  id            String   @id @default(uuid())
+  caseId        String   @map("case_id")
+  cityPlaceId   String   @map("city_place_id")
+  clueType      ClueType @map("clue_type")
+  targetType    String   @default("NONE") @map("target_type")
+  targetValue   String?  @map("target_value")
+  targetRefId   Int?     @map("target_ref_id")
+  generatedText String   @map("generated_text")
+  revealed      Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  case      ActiveCase    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  cityPlace CaseCityPlace @relation(fields: [cityPlaceId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([cityPlaceId])
+  @@map("case_clues")
+}
+
+model CaseVillainClue {
+  id             String   @id @default(uuid())
+  activeCaseId   String   @map("active_case_id")
+  attributeType  String   @map("attribute_type")
+  attributeValue String   @map("attribute_value")
+  targetRefId    Int?     @map("target_ref_id")
+  isRevealed     Boolean  @default(false) @map("is_revealed")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  case ActiveCase @relation(fields: [activeCaseId], references: [id], onDelete: Cascade)
+
+  @@index([activeCaseId])
+  @@map("case_villain_clues")
+}
+
+model CaseDossierNote {
+  id        String   @id @default(uuid())
+  caseId    String   @map("case_id")
+  profileId String   @map("profile_id")
+  sexId     Int?     @map("sex_id")
+  hairId    Int?     @map("hair_id")
+  hobbyId   Int?     @map("hobby_id")
+  vehicleId Int?     @map("vehicle_id")
+  featureId Int?     @map("feature_id")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  case    ActiveCase   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  profile Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sex     AttrSex?     @relation(fields: [sexId], references: [id])
+  hair    AttrHair?    @relation(fields: [hairId], references: [id])
+  hobby   AttrHobby?   @relation(fields: [hobbyId], references: [id])
+  vehicle AttrVehicle? @relation(fields: [vehicleId], references: [id])
+  feature AttrFeature? @relation(fields: [featureId], references: [id])
+
+  @@unique([caseId, profileId])
+  @@map("case_dossier_notes")
+}
+
+model CapturedVillainLog {
+  id                 String   @id @default(uuid())
+  profileId          String   @map("profile_id")
+  caseId             String?  @map("case_id")
+  villainName        String   @map("villain_name")
+  attributesSnapshot Json?    @map("attributes_snapshot")
+  finalDialogue      String?  @map("final_dialogue")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  profile Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  case    ActiveCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@map("captured_villains_log")
+}
+
+// ── Histórico de progressão / gamificação ───────────────────────────────────
+
+model PlayerReputation {
+  id              String   @id @default(uuid())
+  profileId       String   @map("profile_id")
+  caseId          String?  @map("case_id")
+  reputationScore Int      @map("reputation_score")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  profile Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  case    ActiveCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@index([profileId, caseId])
+  @@map("player_reputation")
+}
+
+model PlayerReputationHistory {
+  id              String   @id @default(uuid())
+  profileId       String   @map("profile_id")
+  caseId          String   @map("case_id")
+  reputationScore Int      @map("reputation_score")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  profile Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  case    ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, caseId])
+  @@map("player_reputation_history")
+}
+
+model PlayerXpHistory {
+  id            String   @id @default(uuid())
+  profileId     String   @map("profile_id")
+  caseId        String   @map("case_id")
+  xpAwarded     Int      @map("xp_awarded")
+  breakdownJson Json     @map("breakdown_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  profile Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  case    ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, caseId])
+  @@map("player_xp_history")
+}
+
+model ProfileStatsHistory {
+  id              String   @id @default(uuid())
+  profileId       String   @map("profile_id")
+  caseId          String   @map("case_id")
+  xp              Int
+  reputationScore Int      @map("reputation_score")
+  rankId          Int?     @map("rank_id")
+  casesSolved     Int      @map("cases_solved")
+  casesFailed     Int      @map("cases_failed")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  profile Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  case    ActiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  rank    Rank?      @relation(fields: [rankId], references: [id])
+
+  @@index([profileId, caseId])
+  @@map("profile_stats_history")
+}

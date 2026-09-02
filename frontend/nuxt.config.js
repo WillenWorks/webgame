@@ -4,6 +4,7 @@ import { defineNuxtConfig } from 'nuxt/config';
 export default defineNuxtConfig({
     // @ts-ignore
     compatibilityDate: '2025-01-15',
+    future: { compatibilityVersion: 3 },
     devtools: { enabled: true },
     modules: ['@nuxtjs/tailwindcss'],
     css: ['~/assets/css/main.css'],

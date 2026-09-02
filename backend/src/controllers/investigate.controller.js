@@ -2,15 +2,10 @@ import { investigateService } from '../services/investigate.service.js';
 
 export async function investigateController(req, res, next) {
   try {
-    const text = await investigateService(
-      req.params.caseId,
-      req.body.placeId // agora usa o ID do lugar (city_place.id)
-    );
+    const result = await investigateService(req.params.caseId, req.body.placeId);
 
-    res.json({
-      ok: true,
-      text,
-    });
+    // Shape plano e consistente: { ok, text, timeState, clueType?, gameOver?, solved?, xpEarned?, repDelta? }
+    res.json({ ok: true, ...result });
   } catch (err) {
     next(err);
   }

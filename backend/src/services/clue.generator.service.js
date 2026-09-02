@@ -1,75 +1,98 @@
 import { buildPrompt } from '../ai/prompt.builder.js';
 import { guardAIResponse } from '../ai/ai.guard.js';
-import { callOpenAI } from '../ai/openai.client.js';
+import { callAI, isAiEnabled } from '../ai/ai.client.js';
 import { AI_INTENT } from '../ai/ai.types.js';
+import { clueFallback } from '../ai/fallbacks.js';
+import { buildNextLocationClue, buildVillainAttributeClue } from '../domain/clue.rules.js';
 
-export async function generateClue({
-  archetype,
-  reputation,
-  clueData,
-  fallbackText,
-  context // city, etc.
-}) {
-  if (!clueData || !clueData.clue_type) {
-    return {
-      text: fallbackText || 'Não vi ninguém estranho por aqui hoje. O dia está tranquilo.',
-      meta: null
-    };
+/**
+ * Gera a fala da testemunha.
+ *
+ * O texto determinístico (a partir dos dados culturais validados do seed) é
+ * SEMPRE a base — o jogo é 100% jogável e correto sem IA. Quando a IA está
+ * ativa, ela apenas reescreve esse indício no estilo do NPC; se a reescrita
+ * falhar, mudar de cidade ou entregar o nome direto, cai no determinístico.
+ *
+ * @param {object} params
+ * @param {string} params.archetype
+ * @param {'ALTA'|'NEUTRA'|'BAIXA'} params.reputation
+ * @param {'EASY'|'HARD'|'EXTREME'} [params.difficulty]
+ * @param {'NEXT_LOCATION'|'VILLAIN_ATTRIBUTE'|'WARNING'|'CAPTURE'} params.clueType
+ * @param {object|null} params.truth   { kind:'CITY'|'VILLAIN_ATTR', ... }
+ * @param {{ city?:string, phase?:number, mode?:string }} [params.context]
+ * @returns {Promise<{ text:string, meta:object }>}
+ */
+export async function generateClue({ archetype, reputation, difficulty = 'EASY', clueType, truth, context = {} }) {
+  // ── 1. Texto determinístico (base garantida) ───────────────────────────
+  let deterministic;
+  if (truth?.kind === 'CITY') {
+    deterministic = buildNextLocationClue({
+      cityName: truth.cityName,
+      countryName: truth.countryName,
+      culturalInfo: truth.culturalInfo,
+      descriptionPrompt: truth.descriptionPrompt,
+      topicCategory: truth.topicCategory,
+      reputation,
+    });
+  } else if (truth?.kind === 'VILLAIN_ATTR') {
+    deterministic = buildVillainAttributeClue({
+      attributeType: truth.attributeType,
+      attributeValue: truth.attributeValue,
+      reputation,
+    });
+  } else {
+    deterministic = clueFallback({ reputation, clueType });
   }
 
-  // Preparar contexto para o prompt
+  // ── 2. Enriquecimento opcional via IA ─────────────────────────────────
+  if (!isAiEnabled() || (clueType !== 'NEXT_LOCATION' && clueType !== 'VILLAIN_ATTRIBUTE')) {
+    return { text: deterministic, meta: { clueType, source: 'deterministic' } };
+  }
+
+  const diffFactor = difficulty === 'EXTREME' ? 1.4 : difficulty === 'HARD' ? 1.2 : 1.0;
   const promptContext = {
-    ...context,
-    clue_type: clueData.clue_type,
+    city: context.city || 'Desconhecida',
+    mode: context.mode || 'primary',
+    phase: context.phase,
+    difficulty: diffFactor,
+    clue_type: clueType,
     truth: {
-      targetType: 'NONE',
-      targetValue: null
-    }
+      targetType: truth?.kind === 'CITY' ? 'CITY' : 'VILLAIN_ATTR',
+      targetValue:
+        truth?.kind === 'CITY'
+          ? `${truth.cityName}, ${truth.countryName}`
+          : `${truth.attributeType}: ${truth.attributeValue}`,
+    },
+    topicCategory: truth?.kind === 'CITY' ? truth.topicCategory : undefined,
   };
 
-  if (clueData.clue_type === 'NEXT_LOCATION') {
-    promptContext.truth.targetType = clueData.target_type; // 'CITY'
-    promptContext.truth.targetValue = clueData.target_value; // Nome da cidade ou dica cultural
-  }
-
-  if (clueData.clue_type === 'VILLAIN_ATTRIBUTE') {
-    promptContext.truth.targetType = 'VILLAIN_ATTR';
-    promptContext.truth.targetValue = `${clueData.target_value}: ${clueData.resolved_value}`;
-  }
-  
-  // Agora WARNING e CAPTURE também passam pelo Prompt Builder para serem diegéticos
-  if (clueData.clue_type === 'WARNING' || clueData.clue_type === 'CAPTURE') {
-      promptContext.mode = 'decoy'; // Usa regras restritivas/urgentes
-  }
-
-  // Construir prompt usando o novo builder com suporte a reputação
   const prompt = buildPrompt({
     intent: AI_INTENT.CLUE_TEXT,
     archetype,
-    reputation, // "ALTA", "BAIXA", "NEUTRA"
-    difficulty: context?.difficulty || 1.0,
-    context: promptContext
+    reputation,
+    difficulty: diffFactor,
+    context: promptContext,
   });
-
-  // Fallbacks temáticos por reputação (caso a IA falhe)
-  let fallback = 'Desculpe, estou com pressa.';
-  if (reputation === 'ALTA') fallback = 'Gostaria de ajudar, mas realmente não vi nada. Boa sorte, Agente!';
-  if (reputation === 'BAIXA') fallback = 'Não tenho nada para dizer a você. Circulando.';
-
-  // Fallbacks específicos para Warning/Capture se IA falhar
-  if (clueData.clue_type === 'WARNING') fallback = 'Você não deveria estar aqui. Vá embora.';
-  if (clueData.clue_type === 'CAPTURE') fallback = 'Lá está ele! Peguem o ladrão!';
 
   const text = await guardAIResponse({
-    aiCall: () => callOpenAI(prompt),
-    fallback: fallbackText || fallback
+    aiCall: () =>
+      callAI({
+        system: prompt.system,
+        user: prompt.user,
+        // Cache ligado: a fala é uma reescrita de um indício determinístico —
+        // um mesmo prompt pode reusar a resposta anterior sem prejuízo.
+        options: { temperature: 0.8, maxTokens: 160, cache: true },
+      }),
+    fallback: deterministic,
   });
 
-  return {
-    text,
-    meta: {
-      clue_type: clueData.clue_type,
-      target: clueData.target_value || null
+  // Rejeita reescritas que entregam o destino direto (quebra a dedução).
+  if (truth?.kind === 'CITY') {
+    const t = String(text).toLowerCase();
+    if (t.includes(String(truth.cityName).toLowerCase())) {
+      return { text: deterministic, meta: { clueType, source: 'deterministic-guard' } };
     }
-  };
+  }
+
+  return { text, meta: { clueType, source: 'ai' } };
 }

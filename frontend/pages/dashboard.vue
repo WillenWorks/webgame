@@ -95,15 +95,15 @@
             <div>
                <h2 class="text-3xl font-display text-white uppercase mb-2">MISSÃO EM ANDAMENTO</h2>
                <p class="text-slate-400 max-w-md mx-auto">
-                  Agente, você possui uma operação ativa em <span class="text-amber-400">{{ activeCase.intro_text ? 'LOCAL DESCONHECIDO' : 'TRÂNSITO' }}</span>. 
-                  O tempo é essencial.
+                  Agente, você possui uma operação ativa. O tempo é essencial —
+                  retome a perseguição antes que o rastro esfrie.
                </p>
             </div>
             
             <div class="grid grid-cols-2 gap-8 w-full max-w-md border-t border-slate-700 pt-6">
                <div>
                   <p class="text-xs text-slate-500 uppercase">OBJETIVO</p>
-                  <p class="text-cyan-400 font-mono text-sm">{{ activeCase.stolenObject || 'RECUPERAR ARTEFATO' }}</p>
+                  <p class="text-cyan-400 font-mono text-sm">{{ activeCase.case?.stolen_object || 'RECUPERAR ARTEFATO' }}</p>
                </div>
                <div>
                   <p class="text-xs text-slate-500 uppercase">STATUS</p>
@@ -190,7 +190,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGame } from '~/composables/useGame'
-import { useApi } from '~/composables/useApi' // unused here but usually good practice
+import { useSfx } from '~/composables/useSfx'
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
 
@@ -214,6 +214,7 @@ const {
   isLoading 
 } = useGame()
 
+const sfx = useSfx()
 const router = useRouter()
 const newAgentName = ref('')
 const validating = ref(true)
@@ -254,6 +255,7 @@ const handleCreateProfile = async () => {
 }
 
 const createNewCase = async (difficulty) => {
+  sfx.beep()
   isCreatingCase.value = true
   const messages = [
       "Decodificando chaves de acesso...",
@@ -273,12 +275,14 @@ const createNewCase = async (difficulty) => {
     const newCase = await startCase(difficulty)
     if (newCase && newCase?.case?.id) {
         clearInterval(msgInterval)
+        sfx.confirm()
         loadingMessage.value = "CASO GERADO. INICIANDO..."
         await new Promise(r => setTimeout(r, 500))
         router.push(`/cases/${newCase?.case?.id}/briefing`)
     }
   } catch (e) {
     clearInterval(msgInterval)
+    sfx.error()
     alert('Erro ao criar missão: ' + e.message)
     isCreatingCase.value = false
     // Se falhar porque já existe, recarregar para atualizar a tela
@@ -287,7 +291,7 @@ const createNewCase = async (difficulty) => {
 }
 
 const resumeMission = (caseId) => {
-  router.push(`/cases/${caseId}/map`)
+  router.push(`/cases/${caseId}/briefing`)
 }
 
 const goToArchives = () => {

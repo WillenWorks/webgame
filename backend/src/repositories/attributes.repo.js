@@ -1,12 +1,17 @@
-import pool from '../config/database.js';
+import prisma from '../config/prisma.js';
+
+const MODELS = {
+  attr_sex: () => prisma.attrSex,
+  attr_hair: () => prisma.attrHair,
+  attr_hobby: () => prisma.attrHobby,
+  attr_vehicle: () => prisma.attrVehicle,
+  attr_feature: () => prisma.attrFeature,
+};
 
 export async function getRandomAttribute(table) {
-  const sql = `
-    SELECT id, name
-    FROM ${table}
-    ORDER BY RAND()
-    LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql);
-  return rows[0]; // Returns { id, name }
+  const model = MODELS[table];
+  if (!model) throw new Error(`getRandomAttribute: tabela desconhecida "${table}"`);
+  const rows = await model().findMany({ select: { id: true, name: true } });
+  if (rows.length === 0) return undefined;
+  return rows[Math.floor(Math.random() * rows.length)]; // { id, name }
 }

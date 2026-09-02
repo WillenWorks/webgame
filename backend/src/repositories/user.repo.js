@@ -1,6 +1,17 @@
-import pool from '../config/database.js';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import prisma from '../config/prisma.js';
+
+function toRow(u) {
+  if (!u) return null;
+  return {
+    id: u.id,
+    username: u.username,
+    email: u.email,
+    password_hash: u.passwordHash,
+    created_at: u.createdAt,
+  };
+}
 
 export async function createUser({ id, username, email, password, passwordHash }) {
   const newId = id || randomUUID();
@@ -8,28 +19,23 @@ export async function createUser({ id, username, email, password, passwordHash }
   if (!username || !email || !pwdHash) {
     throw new Error('createUser: username, email e password são obrigatórios');
   }
-  const sql = `
-    INSERT INTO users (id, username, email, password_hash)
-    VALUES (?, ?, ?, ?)
-  `;
-  await pool.execute(sql, [newId, username, email, pwdHash]);
+  await prisma.user.create({
+    data: { id: newId, username, email, passwordHash: pwdHash },
+  });
   return { id: newId, username, email };
 }
 
 export async function findUserByEmail(email) {
-  const sql = `
-    SELECT * FROM users WHERE email = ? LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [email]);
-  return rows[0] || null;
+  return toRow(await prisma.user.findUnique({ where: { email } }));
+}
+
+export async function findUserById(id) {
+  if (!id) return null;
+  return toRow(await prisma.user.findUnique({ where: { id } }));
 }
 
 export async function getUserByUsername(username) {
-  const sql = `
-    SELECT * FROM users WHERE username = ? LIMIT 1
-  `;
-  const [rows] = await pool.execute(sql, [username]);
-  return rows[0] || null;
+  return toRow(await prisma.user.findUnique({ where: { username } }));
 }
 
 export async function validatePassword(user, password) {

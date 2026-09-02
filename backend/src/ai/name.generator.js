@@ -1,4 +1,4 @@
-import { callOpenAI } from "./openai.client.js";
+import { callAI, isAiEnabled } from "./ai.client.js";
 
 const NAME_SEEDS = [
   "Exploradores e viajantes",
@@ -10,6 +10,8 @@ const NAME_SEEDS = [
 ];
 
 export async function generateSuspectName(index = 0, gender = 'Indefinido') {
+  if (!isAiEnabled()) return fallbackName(index, gender);
+
   const theme = NAME_SEEDS[index % NAME_SEEDS.length];
 
   const system = `
@@ -40,8 +42,33 @@ export async function generateSuspectName(index = 0, gender = 'Indefinido') {
     "1. Victor Marlowe 2. John Smith"
     `;
 
-  const rawName = await callOpenAI({ system, user });
+  let rawName;
+  try {
+    rawName = await callAI({
+      system,
+      user,
+      options: { temperature: 0.9, maxTokens: 24 },
+    });
+  } catch (err) {
+    console.warn('[name.generator] fallback de nome acionado:', err.message);
+    return fallbackName(index, gender);
+  }
   return normalizeName(rawName);
+}
+
+// Nomes de reserva (offline) — variados o bastante para 12 suspeitos por caso.
+const FALLBACK_FIRST_M = ["Victor", "Rurik", "Amaro", "Caspian", "Dario", "Ingmar", "Tobias", "Rafael", "Néstor", "Silvan", "Lorcan", "Emeric"];
+const FALLBACK_FIRST_F = ["Vesna", "Ottilie", "Marlowe", "Isaura", "Freya", "Calla", "Dagny", "Lucía", "Priya", "Solveig", "Ravenna", "Elke"];
+const FALLBACK_LAST = ["Marlowe", "Vansel", "Okonkwo", "Ferreira", "Nakamura", "Dubois", "Hargrove", "Petrova", "al-Rashid", "Lindqvist", "Costa", "Vane"];
+
+function fallbackName(index = 0, gender = 'Indefinido') {
+  const g = String(gender).toLowerCase();
+  const firsts = g.startsWith('f') || g.includes('mulher') || g.includes('fem')
+    ? FALLBACK_FIRST_F
+    : FALLBACK_FIRST_M;
+  const first = firsts[index % firsts.length];
+  const last = FALLBACK_LAST[(index * 7 + 3) % FALLBACK_LAST.length];
+  return `${first} ${last}`;
 }
 
 function normalizeName(name) {

@@ -1,16 +1,19 @@
 import { getCurrentRouteStep, getNextRouteCity, markRouteStepVisited, getStepOptions } from '../repositories/route.repo.js';
+import { getCaseById } from '../repositories/warrant.repo.js';
 import { countLocationClues } from '../repositories/travel.repo.js';
 import { initTravelLogTable, insertTravelLog } from '../repositories/travel_log.repo.js';
 import { initCurrentViewTable, setCurrentView } from '../repositories/current_view.repo.js';
+import { getCaseDifficulty } from '../repositories/case.repo.js';
 import { estimateTravelMinutes, consumeActionTime, getCaseTimeSummary } from './time.service.js';
+import { finishCaseService } from './finish_case.service.js';
+import { GAME_TIMEZONE } from '../config/game.rules.js';
 import { v4 as uuid } from 'uuid';
 
 // Introduzir chance controlada de falha de viagem em HARD/EXTREME
 async function getCaseDifficultyLabel(caseId) {
   try {
-    const { default: db } = await import('../config/database.js');
-    const [[row]] = await db.execute('SELECT gd.code AS difficulty_code FROM active_cases ac JOIN game_difficulty gd ON gd.id = ac.difficulty_id WHERE ac.id = ? LIMIT 1', [caseId]);
-    return row?.difficulty_code || 'EASY';
+    const code = await getCaseDifficulty(caseId);
+    return code || 'EASY';
   } catch { return 'EASY'; }
 }
 
@@ -24,6 +27,19 @@ function shouldFailTravelRandom(diffLabel) {
 export async function travelService(caseId, destinationCityId) {
   await initTravelLogTable();
   await initCurrentViewTable();
+
+  const gameCase = await getCaseById(caseId);
+  if (gameCase && gameCase.status !== 'ACTIVE') {
+    const timeState = await getCaseTimeSummary({ caseId });
+    return {
+      success: false,
+      message: 'Este caso já foi encerrado.',
+      text: 'Este caso já foi encerrado.',
+      gameOver: true,
+      solved: gameCase.status === 'SOLVED',
+      timeState,
+    };
+  }
 
   const currentStep = await getCurrentRouteStep(caseId);
 
@@ -75,15 +91,25 @@ export async function travelService(caseId, destinationCityId) {
     } else {
       await setCurrentView(caseId, destinationCityId, currentStep.step_order);
     }
-    await insertTravelLog({ id: uuid(), caseId, fromCityId: currentStep.city_id, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: isCorrect, reason: isCorrect ? 'Avanço de fase' : 'Rota incorreta' });
+    await insertTravelLog({
+      id: uuid(),
+      caseId,
+      fromCityId: currentStep.city_id,
+      toCityId: destinationCityId,
+      stepOrder: currentStep.step_order,
+      success: isCorrect,
+      reason: isCorrect ? 'Avanço de fase' : 'Rota incorreta',
+      arrivalTime: new Date(),
+    });
   }
 
-  // Consome tempo da viagem (inclui decoy e falha aleatória)
+  // Consome tempo da viagem. Numa falha aleatória o voo não acontece: você
+  // perde apenas parte do tempo (traslados, espera no aeroporto), não a viagem toda.
   let failed = false;
   try {
-    const minutes = await estimateTravelMinutes({ fromCityId: currentStep.city_id, toCityId: destinationCityId, caseId });
-    const extraPenalty = randomFail ? Math.ceil(minutes * 0.20) : 0; 
-    const resultTime = await consumeActionTime({ caseId, minutes: minutes + extraPenalty, timezone: 'America/Sao_Paulo' });
+    const minutes = await estimateTravelMinutes(currentStep.city_id, destinationCityId, caseId);
+    const spent = randomFail ? Math.ceil(minutes * 0.35) : minutes;
+    const resultTime = await consumeActionTime({ caseId, minutes: spent, timezone: GAME_TIMEZONE });
     failed = resultTime.failed; // Verifica se estourou o prazo
   } catch (e) {
     console.warn('Falha ao consumir tempo de viagem:', e?.message || e);
@@ -93,27 +119,21 @@ export async function travelService(caseId, destinationCityId) {
   const timeState = await getCaseTimeSummary({ caseId });
 
   if (failed) {
-    return {
-      success: false,
-      message: 'TEMPO ESGOTADO! Você demorou demais e o vilão escapou.',
-      gameOver: true,
-      timeState
-    };
+    return finishCaseService({
+      caseId,
+      status: 'FAILED',
+      finalDialogue: 'TEMPO ESGOTADO! Você demorou demais e o vilão escapou.',
+      timeState,
+    });
   }
 
   if (randomFail) {
-    return { 
-      success: false, 
-      message: 'A viagem falhou por imprevistos (atrasos, problemas mecânicos). Você perdeu tempo e precisa tentar novamente.',
-      timeState
-    };
+    const message = 'A viagem falhou por imprevistos (atrasos, problemas mecânicos). Você perdeu tempo e precisa tentar novamente.';
+    return { success: false, message, text: message, timeState };
   }
 
-  return {
-    success: isCorrect,
-    message: isCorrect 
-      ? 'Você seguiu a pista corretamente e avançou na investigação.' 
-      : 'Algo não bateu com as pistas. Você perdeu tempo seguindo um caminho errado.',
-    timeState
-  };
+  const message = isCorrect
+    ? 'Você seguiu a pista corretamente e avançou na investigação.'
+    : 'Algo não bateu com as pistas. Você perdeu tempo seguindo um caminho errado.';
+  return { success: isCorrect, message, text: message, timeState };
 }

@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { getCapturedVillains } from '../repositories/captured.repo.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
+import { requireProfileMiddleware } from '../middlewares/require_profile.middleware.js';
 
 const router = Router();
 
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, requireProfileMiddleware, async (req, res) => {
   try {
     const profileId = req.user.profileId;
     if (!profileId) return res.status(400).json({ ok: false, message: 'Profile required' });

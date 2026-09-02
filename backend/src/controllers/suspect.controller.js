@@ -1,4 +1,14 @@
 import { listSuspectsService } from '../services/suspect.service.js';
+import { getCaseAttributeOptions } from '../repositories/suspect.repo.js';
+
+export async function listCaseAttributesController(req, res, next) {
+  try {
+    const attributes = await getCaseAttributeOptions(req.params.caseId);
+    res.json({ ok: true, attributes });
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function listSuspectsController(req, res, next) {
   try {

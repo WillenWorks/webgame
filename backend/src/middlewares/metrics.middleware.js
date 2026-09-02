@@ -1,10 +1,30 @@
 import { httpRequestsTotal, httpRequestDurationSeconds, renderMetrics, startTimer } from '../utils/metrics.js';
 
+// Label único para tudo que não casou com nenhuma rota (404, ou rejeição por
+// middleware antes do dispatch: auth 401, rate-limit 429, CORS). Sem isso, um
+// scanner batendo em paths aleatórios explodiria a cardinalidade do Prometheus.
+export const UNMATCHED_ROUTE = '<unmatched>';
+
+/**
+ * Rótulo estável para a rota. Usa o padrão casado pelo Express
+ * (`/api/v1/cases/:caseId/investigate`) — já vem com placeholders e cardinalidade
+ * limitada. Sem rota casada, colapsa em `<unmatched>`.
+ */
+export function routeLabel(req) {
+  if (req.route && typeof req.route.path === 'string') {
+    const base = req.baseUrl || '';
+    const sub = req.route.path === '/' ? '' : req.route.path;
+    return `${base}${sub}` || '/';
+  }
+  return UNMATCHED_ROUTE;
+}
+
 // Metrics middleware: records per-request metrics
 export function metricsMiddleware(req, res, next) {
   const stop = startTimer();
-  const route = req.route?.path || req.originalUrl || 'unknown';
   res.on('finish', () => {
+    // Avaliado no 'finish': aqui `req.route` já foi preenchido pelo dispatch.
+    const route = routeLabel(req);
     const status = res.statusCode;
     const duration = stop();
     httpRequestsTotal.inc({ method: req.method, route, status });

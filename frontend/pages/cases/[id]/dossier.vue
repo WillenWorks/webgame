@@ -1,8 +1,8 @@
 <template>
-  <div class="flex flex-col gap-6 max-w-6xl mx-auto w-full p-6 h-full relative">
+  <div class="flex flex-col gap-6 max-w-6xl mx-auto w-full p-3 sm:p-6 h-full relative">
     <!-- Header -->
-    <div class="flex justify-between items-center bg-black/50 p-4 border-2 border-amber-500 shadow-lg z-10">
-      <h2 class="text-2xl font-display text-amber-400 uppercase drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+    <div class="flex flex-wrap justify-between items-center gap-3 bg-black/50 p-3 sm:p-4 border-2 border-amber-500 shadow-lg z-10">
+      <h2 class="text-lg sm:text-2xl font-display text-amber-400 uppercase drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
         INTERPOL / DOSSIÊ COMPUTADORIZADO
       </h2>
       <RetroButton variant="outline" @click="goBack">
@@ -10,7 +10,7 @@
       </RetroButton>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
       
       <!-- Filtros / Notas -->
       <RetroCard title="IDENTIFICAR SUSPEITO / NOTAS" extraClass="border-cyan-500/50">
@@ -43,7 +43,7 @@
 
       <!-- Resultado / Mandado -->
       <div class="flex flex-col gap-6 h-full min-h-0">
-        <RetroCard title="RESULTADOS DA BUSCA" class="flex-1 min-h-0 flex flex-col">
+        <RetroCard title="RESULTADOS DA BUSCA" class="flex-1 min-h-[45vh] lg:min-h-0 flex flex-col">
           <div v-if="isLoading" class="flex items-center justify-center h-full p-4">
             <span class="animate-pulse text-cyan-400 font-mono">PROCESSANDO DADOS...</span>
           </div>
@@ -153,12 +153,14 @@ import { useRouter, useRoute } from 'vue-router'
 import RetroCard from '~/components/ui/RetroCard.vue'
 import RetroButton from '~/components/ui/RetroButton.vue'
 import { useGame } from '~/composables/useGame'
+import { useSfx } from '~/composables/useSfx'
 
 const router = useRouter()
 const route = useRoute()
 const caseId = route.params.id
 
-const { filterSuspects, issueWarrant, getDossierNotes, saveDossierNotes, fetchActiveCase, cases } = useGame()
+const { filterSuspects, fetchCaseAttributes, issueWarrant, getDossierNotes, saveDossierNotes, fetchActiveCase, cases } = useGame()
+const sfx = useSfx()
 
 const filters = ref({
   sex_id: '',
@@ -183,83 +185,14 @@ const labels = {
   vehicle_id: 'Veículo'
 }
 
-const filtersConfig = {
-  sex_id: [
-    { id: 2, label: 'Masculino' }, 
-    { id: 1, label: 'Feminino' },
-    { id: 3, label: 'Outro' }
-  ],
-  hair_id: [
-    { id: 1, label: 'Preto' },
-    { id: 2, label: 'Castanho' },
-    { id: 3, label: 'Loiro' },
-    { id: 4, label: 'Ruivo' },
-    { id: 5, label: 'Grisalho' },
-    { id: 6, label: 'Careca' },
-    { id: 7, label: 'Colorido' },
-    { id: 8, label: 'Trançado' },
-    { id: 9, label: 'Longo' },
-    { id: 10, label: 'Curto' },
-    { id: 11, label: 'Encaracolado' }
-  ],
-  hobby_id: [
-    { id: 1, label: 'Fotografia' },
-    { id: 2, label: 'Escalada' },
-    { id: 3, label: 'Leitura' },
-    { id: 4, label: 'Dança' },
-    { id: 5, label: 'Culinária' },
-    { id: 6, label: 'Tênis' },
-    { id: 7, label: 'Croquet' },
-    { id: 8, label: 'Paraquedismo' },
-    { id: 9, label: 'Mergulho' },
-    { id: 10, label: 'Xadrez' },
-    { id: 11, label: 'Jardinagem' },
-    { id: 12, label: 'Yoga' },
-    { id: 13, label: 'Pintura' },
-    { id: 14, label: 'Astronomia' },
-    { id: 15, label: 'Volêi' },
-    { id: 16, label: 'História' },
-    { id: 17, label: 'Arqueologia' },
-    { id: 18, label: 'Colecionismo' },
-    { id: 19, label: 'Críquete' },
-    { id: 20, label: 'Polo' },
-    { id: 21, label: 'Esgrima' }
-  ],
-  feature_id: [
-    { id: 1, label: 'Cicatriz' },
-    { id: 2, label: 'Tatuagem' },
-    { id: 3, label: 'Óculos' },
-    { id: 4, label: 'Chapéu' },
-    { id: 5, label: 'Barba' }, 
-    { id: 6, label: 'Joia Exótica' },
-    { id: 7, label: 'Anel de Rubi' },
-    { id: 8, label: 'Colar de Pérolas' },
-    { id: 9, label: 'Bengala' },
-    { id: 10, label: 'Luvas' },
-    { id: 11, label: 'Sarda' },
-    { id: 12, label: 'Marca de Nascença' },
-    { id: 13, label: 'Monóculo' },
-    { id: 14, label: 'Relógio de Bolso' }
-  ],
-  vehicle_id: [
-    { id: 1, label: 'Conversível' },
-    { id: 2, label: 'Limousine' },
-    { id: 3, label: 'Esportivo' },
-    { id: 4, label: 'Motocicleta' },
-    { id: 5, label: 'Limousine' },
-    { id: 6, label: 'Moto Esportiva' },
-    { id: 7, label: 'Jato Privado' },
-    { id: 8, label: 'Iate' },
-    { id: 9, label: 'Bicicleta' },
-    { id: 10, label: 'Tuk-tuk' },
-    { id: 11, label: 'Caminhão' },
-    { id: 12, label: 'Helicóptero' },
-    { id: 13, label: 'Carro Antigo' },
-    { id: 14, label: 'Hovercraft' },
-    { id: 15, label: 'Dirigível' },
-    { id: 16, label: 'Veleiro' }
-  ]
-}
+// Opções vêm do backend (pool real de suspeitos deste caso) — nunca hardcoded.
+const filtersConfig = ref({
+  sex_id: [],
+  hair_id: [],
+  hobby_id: [],
+  feature_id: [],
+  vehicle_id: [],
+})
 
 onMounted(async () => {
   await loadState()
@@ -270,17 +203,22 @@ const loadState = async () => {
   try {
     // 1. Check for existing warrant in active case
     await fetchActiveCase()
-    const activeCase = cases.value.find(c => c.id === caseId)
-    if (activeCase && activeCase.warrant_suspect_id) {
-       warrantIssuedId.value = activeCase.warrant_suspect_id
+    const active = cases.value.find(c => String(c.id) === String(caseId))
+    if (active && active.warrant_suspect_id) {
+       warrantIssuedId.value = active.warrant_suspect_id
     }
+
+    // 1b. Opções de atributo reais deste caso
+    const attrs = await fetchCaseAttributes(caseId)
+    Object.keys(filtersConfig.value).forEach(k => {
+      filtersConfig.value[k] = Array.isArray(attrs[k]) ? attrs[k] : []
+    })
 
     // 2. Load Notes
     const notes = await getDossierNotes(caseId)
     if (notes) {
-       // Populate filters with saved notes
        Object.keys(filters.value).forEach(k => {
-          if (notes?.notes[k]) filters.value[k] = notes?.notes[k]
+          if (notes[k]) filters.value[k] = notes[k]
        })
     }
 
@@ -312,6 +250,7 @@ const refreshSuspects = async () => {
 }
 
 const handleFilterChange = async () => {
+  sfx.blip()
   // Save notes automatically
   savingNotes.value = true
   try {
@@ -337,14 +276,17 @@ const handleWarrant = async (suspectId) => {
   try {
     const res = await issueWarrant(caseId, suspectId)
     if (res.ok) {
+      sfx.confirm()
       alert(`MANDADO EMITIDO PARA: ${selectedSuspect.value?.name || 'SUSPEITO'}`)
       // Update state locally
       warrantIssuedId.value = suspectId
       router.push(`/cases/${caseId}/city`)
     } else {
+      sfx.error()
       alert(`ERRO AO EMITIR MANDADO: ${res.message}`)
     }
   } catch (e) {
+    sfx.error()
     alert('Erro de comunicação com HQ.')
   } finally {
     issuing.value = false

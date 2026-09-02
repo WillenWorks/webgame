@@ -2,6 +2,7 @@ import { v4 as uuid } from "uuid";
 import { getRandomAttribute } from "../repositories/attributes.repo.js";
 import { insertSuspect } from "../repositories/suspect.repo.js";
 import { generateSuspectName } from "../ai/name.generator.js";
+import { buildSuspectAttributeSets, culpritIsUnique, ATTR_KEYS } from "../domain/suspect.rules.js";
 
 const ATTR_TABLES = {
   sex_id: "attr_sex",
@@ -13,7 +14,7 @@ const ATTR_TABLES = {
 
 const SUSPECT_COUNT = 12;
 
-// quantos valores distintos mínimos por atributo
+// Quantos valores distintos mínimos por atributo (diversidade da pool).
 const DIVERSITY_RULES = {
   sex_id: 2,
   hair_id: 5,
@@ -26,80 +27,50 @@ async function generateAttributePool(table, count) {
   const pool = [];
   const ids = new Set();
   let attempts = 0;
-  
-  while (pool.length < count && attempts < 30) {
+
+  while (pool.length < count && attempts < 40) {
     attempts++;
-    const attr = await getRandomAttribute(table); // returns {id, name}
-    if (!attr) continue;
-    if (!ids.has(attr.id)) {
-      ids.add(attr.id);
-      pool.push(attr);
-    }
+    const attr = await getRandomAttribute(table); // { id, name }
+    if (!attr || ids.has(attr.id)) continue;
+    ids.add(attr.id);
+    pool.push(attr);
   }
-  
-  // Fallback se faltar diversidade (duplicar existentes)
-  while (pool.length < count && pool.length > 0) {
-      pool.push(pool[0]); 
+  if (pool.length < 2) {
+    throw new Error(`Pool de atributos insuficiente para ${table}`);
   }
-  
   return pool;
 }
 
 export async function generateSuspectsForCase(caseId) {
-  // 1️⃣ Criar pools de atributos
+  // 1️⃣ Pools de atributos
   const pools = {};
-  for (const key of Object.keys(ATTR_TABLES)) {
-    pools[key] = await generateAttributePool(
-      ATTR_TABLES[key],
-      DIVERSITY_RULES[key]
-    );
+  for (const key of ATTR_KEYS) {
+    pools[key] = await generateAttributePool(ATTR_TABLES[key], DIVERSITY_RULES[key]);
   }
 
-  // 2️⃣ Criar culpado usando o primeiro valor de cada pool
-  const culpritAttrs = {};
-  const culpritDb = {};
-  
-  for (const key in pools) {
-    const obj = pools[key][0];
-    culpritAttrs[key] = obj;
-    culpritDb[key] = obj.id;
+  // 2️⃣ Conjuntos de atributos — índice 0 = culpado, unicidade garantida
+  const sets = buildSuspectAttributeSets(pools, SUSPECT_COUNT);
+  if (!culpritIsUnique(sets)) {
+    throw new Error("Falha ao gerar pool de suspeitos com culpado único");
   }
 
-  const culpritId = uuid();
-  // Passar genero para gerador de nome
-  const culpritSex = culpritAttrs['sex_id']?.name || 'Indefinido';
-  const culpritName = await generateSuspectName(0, culpritSex);
+  const nameById = {};
+  for (const key of ATTR_KEYS) {
+    for (const v of pools[key]) nameById[`${key}:${v.id}`] = v.name;
+  }
 
-  await insertSuspect({
-    id: culpritId,
-    case_id: caseId,
-    name: culpritName,
-    ...culpritDb,
-    is_culprit: true,
-  });
-
-  // 3️⃣ Criar inocentes
-  for (let i = 1; i < SUSPECT_COUNT; i++) {
-    const decoyDb = {};
-    const decoyAttrs = {};
-
-    for (const key in pools) {
-      // distribui valores do pool ciclicamente
-      const obj = pools[key][i % pools[key].length];
-      decoyAttrs[key] = obj;
-      decoyDb[key] = obj.id;
-    }
-
-    const decoyId = uuid();
-    const decoySex = decoyAttrs['sex_id']?.name || 'Indefinido';
-    const decoyName = await generateSuspectName(i, decoySex);
+  // 3️⃣ Inserir suspeitos
+  for (let i = 0; i < sets.length; i++) {
+    const set = sets[i];
+    const sexName = nameById[`sex_id:${set.sex_id}`] || "Indefinido";
+    const name = await generateSuspectName(i, sexName);
 
     await insertSuspect({
-      id: decoyId,
+      id: uuid(),
       case_id: caseId,
-      name: decoyName,
-      ...decoyDb,
-      is_culprit: false,
+      name,
+      ...set,
+      is_culprit: i === 0,
     });
   }
 }

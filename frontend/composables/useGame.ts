@@ -25,7 +25,6 @@ type Profile = {
 type TimeState = {
   current_time: string; // ISO Date
   deadline_time: string; // ISO Date
-  hours_per_day: number;
   days_remaining: number;
 };
 
@@ -59,12 +58,14 @@ type Suspect = {
 
 type VisitCurrentCityResponse = {
   city: {
-    city_id: string;
+    city_id: number;
     city_name: string;
     country_name: string;
-    geo_coordinates: { x: number; y: number };
+    lat: number;
+    lon: number;
     step_order: number;
-    imageUrl?: string;
+    description_prompt?: string;
+    image_url?: string;
   };
   travelOptions?: TravelOption[];
   timeState?: TimeState;
@@ -92,6 +93,31 @@ type RoutesResponse = {
 };
 
 /* =========================
+ *  HELPERS
+ * ========================= */
+/**
+ * Guarda de fronteira do `timeState`. O backend já entrega
+ * `{ start_time, deadline_time, current_time, daysEarly, days_remaining }` em
+ * ISO UTC; aqui só garantimos não-nulo e derivamos `days_remaining` caso ele
+ * venha ausente de alguma resposta mais antiga.
+ */
+function normalizeTimeState(ts: any): TimeState | null {
+  if (!ts?.current_time || !ts?.deadline_time) return null;
+
+  let days_remaining = ts.days_remaining;
+  if (days_remaining == null) {
+    const diffMs = new Date(ts.deadline_time).getTime() - new Date(ts.current_time).getTime();
+    days_remaining = Number.isFinite(diffMs) ? Math.max(0, Math.ceil(diffMs / 86_400_000)) : 0;
+  }
+
+  return {
+    current_time: ts.current_time,
+    deadline_time: ts.deadline_time,
+    days_remaining,
+  };
+}
+
+/* =========================
  *  STATE (Global)
  * ========================= */
 const profile = ref<Profile | null>(null);
@@ -111,11 +137,11 @@ export function useGame() {
    *  HELPER: SYNC TIME
    * ========================= */
   const syncGameState = (data: any) => {
-    if (data?.timeState) {
-      timeState.value = data.timeState;
-    }
+    const ts = normalizeTimeState(data?.timeState);
+    if (ts) timeState.value = ts;
+
     if (data?.gameOver) {
-      lastGameOver.value = data.win ? "WIN" : "LOSE";
+      lastGameOver.value = data?.solved ? "WIN" : "LOSE";
     }
   };
 
@@ -146,21 +172,23 @@ export function useGame() {
 
       if (data && data?.case?.id) {
         activeCase.value = data;
-        if (data.currentTime || data.current_time) {
-          timeState.value = {
-            current_time: data.currentTime || data.current_time,
-            deadline_time: data.deadlineTime || data.deadline_time,
-            hours_per_day: 16,
-            days_remaining: 7,
-          };
-        }
+        // Mantém `cases` como fonte única para app.vue / dossier.vue / briefing.vue
+        cases.value = [data.case];
+
+        const ts = normalizeTimeState(data.timeState);
+        if (ts) timeState.value = ts;
+
         return data;
       } else {
         activeCase.value = null;
+        cases.value = [];
+        timeState.value = null;
+        lastGameOver.value = null;
       }
     } catch (e) {
       console.error("[GAME] Erro ao buscar caso ativo", e);
       activeCase.value = null;
+      cases.value = [];
     } finally {
       isLoading.value = false;
     }
@@ -169,10 +197,11 @@ export function useGame() {
   // 3. Start New Case
   const startCase = async (difficulty: string) => {
     isProcessingCase.value = true;
+    lastGameOver.value = null; // limpa desfecho de um caso anterior
     try {
       const data = await fetchApi("/cases", {
         method: "POST",
-        body: JSON.stringify({ difficulty }),
+        body: { difficulty },
       });
       if (data && data?.case?.id) {
         activeCase.value = data;
@@ -192,8 +221,6 @@ export function useGame() {
     isLoading.value = true;
     try {
       const data = await fetchApi(`/cases/${caseId}/visit-current`);
-      console.log(`visitCurrentCity for caseId: ${caseId}`);
-      console.log("visitCurrentCity data:", data);
       if (data) {
         currentCity.value = data.city;
         syncGameState(data);
@@ -242,6 +269,19 @@ export function useGame() {
     }
   };
 
+  // 7a. Opções de atributo da pool de suspeitos deste caso (dirige os selects do dossiê)
+  const fetchCaseAttributes = async (caseId: string) => {
+    try {
+      const res = await fetchApi<{ ok: boolean; attributes: Record<string, Array<{ id: number; label: string }>> }>(
+        `/cases/${caseId}/suspects/attributes`,
+      );
+      return res?.attributes ?? {};
+    } catch (e) {
+      console.error("[GAME] Erro ao carregar atributos do caso", e);
+      return {};
+    }
+  };
+
   // 7. Filter Suspects (Dossier)
   const filterSuspects = async (caseId: string, criteria: Partial<Suspect>) => {
     const params = new URLSearchParams();
@@ -272,13 +312,16 @@ export function useGame() {
     }
   };
 
-  // 9. Get Dossier Notes
+  // 9. Get Dossier Notes → devolve apenas o objeto de características anotadas
   const getDossierNotes = async (caseId: string) => {
     try {
-      return await fetchApi(`/cases/${caseId}/dossier/`);
+      const res = await fetchApi<{ ok: boolean; notes: any }>(
+        `/cases/${caseId}/dossier`,
+      );
+      return res?.notes ?? {};
     } catch (e) {
-      console.error(e);
-      return null;
+      console.error("[GAME] Erro ao carregar notas do dossiê", e);
+      return {};
     }
   };
 
@@ -311,7 +354,6 @@ export function useGame() {
 
       const options: number[] =
         res.route[stepOrder - 1]?.clues_generated_json?.options ?? [];
-      console.log("[GAME] Rotas disponíveis (IDs):", options);
 
       if (!options.length) {
         availableRoutes.value = [];
@@ -361,8 +403,9 @@ export function useGame() {
       return [];
     }
   };
-  const refreshTimeState = (newState: TimeState) => {
-    if (newState) timeState.value = newState;
+  const refreshTimeState = (newState: any) => {
+    const ts = normalizeTimeState(newState);
+    if (ts) timeState.value = ts;
   };
 
   return {
@@ -383,6 +426,7 @@ export function useGame() {
     travelToCity,
     investigatePlace,
     filterSuspects,
+    fetchCaseAttributes,
     fetchRoutes,
     issueWarrant,
     getDossierNotes,
