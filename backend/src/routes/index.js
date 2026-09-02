@@ -10,7 +10,10 @@ import cityRoutes from "./city.routes.js";
 import capturedRoutes from "../controllers/captured.controller.js";
 
 export default function registerRoutes(app) {
-  app.use("/api/v1/dev", devRoutes);
+  // Rotas de diagnóstico só existem fora de produção.
+  if (process.env.NODE_ENV !== "production") {
+    app.use("/api/v1/dev", devRoutes);
+  }
   app.use("/api/v1/auth", authRoutes);
   app.use("/api/v1/profiles", profileRoutes);
   app.use("/api/v1/cases", caseRoutes);
