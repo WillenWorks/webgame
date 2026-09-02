@@ -1,5 +1,6 @@
 import env from '../config/env.js';
 import { observeAiCall } from '../utils/metrics.js';
+import { makeCacheKey, getCached, setCached } from './ai.cache.js';
 
 /**
  * Adaptador universal de IA — desacopla o jogo de qualquer SDK específico.
@@ -74,8 +75,10 @@ async function generateWithGemini({ system, user, options }) {
   const config = {
     temperature: options.temperature ?? 0.7,
     maxOutputTokens: options.maxTokens ?? 400,
-    // Desativa o "thinking" do 2.5 Flash → latência mínima (< 800ms).
-    thinkingConfig: { thinkingBudget: 0 },
+    // Menor nível de "thinking" do 3.6 Flash → latência mínima.
+    // (thinkingBudget: 0 passou a retornar 400 INVALID_ARGUMENT nesta geração;
+    //  thinkingLevel aceita "minimal" | "low" | "medium" | "high".)
+    thinkingConfig: { thinkingLevel: options.thinkingLevel ?? 'minimal' },
   };
 
   if (system) config.systemInstruction = system;
@@ -150,6 +153,17 @@ export async function callAI({ system, user, options = {} }) {
   const timeout = options.timeout ?? DEFAULT_TIMEOUT;
   const maxRetries = options.retries ?? DEFAULT_RETRIES;
 
+  // Cache determinístico opt-in: a chave cobre provedor, modelo e prompt.
+  const model =
+    options.model || (providerName === 'claude' ? env.ANTHROPIC_MODEL : env.GEMINI_MODEL);
+  const cacheKey = options.cache
+    ? makeCacheKey({ provider: providerName, model, system, user, schema: options.schema })
+    : null;
+  if (cacheKey) {
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+  }
+
   let lastError = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const startedAt = Date.now();
@@ -166,7 +180,9 @@ export async function callAI({ system, user, options = {} }) {
             `[AI] ${providerName} ok em ${Date.now() - startedAt}ms (tentativa ${attempt + 1})`,
           );
         }
-        return text.trim();
+        const clean = text.trim();
+        if (cacheKey) setCached(cacheKey, clean);
+        return clean;
       }
       lastError = new Error(`Provedor ${providerName} retornou resposta vazia`);
       observeAiCall({ provider: providerName, result: 'error', seconds: (Date.now() - startedAt) / 1000 });

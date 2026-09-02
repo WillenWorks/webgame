@@ -76,7 +76,13 @@ export async function generateClue({ archetype, reputation, difficulty = 'EASY',
 
   const text = await guardAIResponse({
     aiCall: () =>
-      callAI({ system: prompt.system, user: prompt.user, options: { temperature: 0.8, maxTokens: 160 } }),
+      callAI({
+        system: prompt.system,
+        user: prompt.user,
+        // Cache ligado: a fala é uma reescrita de um indício determinístico —
+        // um mesmo prompt pode reusar a resposta anterior sem prejuízo.
+        options: { temperature: 0.8, maxTokens: 160, cache: true },
+      }),
     fallback: deterministic,
   });
 

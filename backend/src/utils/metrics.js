@@ -36,6 +36,22 @@ export const aiRequestDurationSeconds = new client.Histogram({
   registers: [metricsRegistry],
 });
 
+// AI response cache metrics
+export const aiCacheEventsTotal = new client.Counter({
+  name: 'ai_cache_events_total',
+  help: 'AI response cache events',
+  labelNames: ['event'], // hit | miss | store
+  registers: [metricsRegistry],
+});
+
+/**
+ * Registra um evento do cache de respostas de IA.
+ * @param {'hit'|'miss'|'store'} event
+ */
+export function observeAiCache(event) {
+  aiCacheEventsTotal.inc({ event });
+}
+
 /**
  * Registra o desfecho de uma chamada de IA nas métricas Prometheus.
  * @param {{ provider?: string, result: 'success'|'fallback'|'error', seconds?: number }} params
