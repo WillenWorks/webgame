@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 
-// Error responder: padrão único com requestId, code, message, details
-export function errorMiddleware(err, req, res, next) {
+// Error responder: padrão único com requestId, code, message, details.
+// A 4ª posição (_next) é obrigatória para o Express reconhecer como error handler.
+export function errorMiddleware(err, req, res, _next) {
   const requestId = req.headers['x-request-id'] || randomUUID();
 
   // Zod-like issues

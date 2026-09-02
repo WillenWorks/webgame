@@ -64,8 +64,8 @@ registerRoutes(app);
 // Erros padronizados
 app.use(errorMiddleware);
 
-// Fallback
-app.use((err, req, res, next) => {
+// Fallback (rede de segurança; errorMiddleware acima já responde tudo)
+app.use((err, req, res, _next) => {
   console.error(err);
   res.status(500).json({
     ok: false,

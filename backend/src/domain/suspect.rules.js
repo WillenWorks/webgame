@@ -10,12 +10,14 @@ function sameAllAttrs(a, b) {
 }
 
 /**
+ * Determinístico por design (spread via `i % pool.length`) — casos são
+ * reproduzíveis para debug e teste, sem RNG.
+ *
  * @param {Record<string, Array<{id:number}>>} pools  pool de valores por atributo (>= 2 valores cada)
  * @param {number} count  total de suspeitos (culpado incluso)
- * @param {() => number} [rand]
  * @returns {Array<Record<string, number>>}  count conjuntos; índice 0 = culpado
  */
-export function buildSuspectAttributeSets(pools, count, rand = Math.random) {
+export function buildSuspectAttributeSets(pools, count) {
   for (const k of ATTR_KEYS) {
     if (!Array.isArray(pools[k]) || pools[k].length === 0) {
       throw new Error(`buildSuspectAttributeSets: pool vazio para ${k}`);

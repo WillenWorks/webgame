@@ -77,7 +77,7 @@ function normalizeName(name) {
   return name
     .replace(/\r?\n/g, " ") // remove quebras
     .replace(/\d+\./g, "") // remove numeração "1."
-    .split(/[,;]|  \s+/)[0] // corta listas
+    .split(/[,;]| {2,}/)[0] // corta listas (vírgula, ponto-e-vírgula ou 2+ espaços)
     .trim()
     .split(" ")
     .slice(0, 3) // no máx 3 palavras

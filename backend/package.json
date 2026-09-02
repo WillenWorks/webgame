@@ -15,7 +15,9 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "eslint": "^9.39.2",
+    "globals": "^14.0.0",
     "nodemon": "^3.1.11",
     "prisma": "^6.1.0"
   },
@@ -25,14 +27,13 @@
     "start": "node src/server.js",
     "test": "node --test \"test/**/*.test.js\"",
     "test:watch": "node --test --watch \"test/**/*.test.js\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "e2e": "node tools/runner.js",
     "e2e:all": "node tools/runner-all.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "db:seed": "prisma db seed"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.js"
   }
 }

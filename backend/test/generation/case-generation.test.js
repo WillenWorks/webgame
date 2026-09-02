@@ -99,7 +99,7 @@ describe('Geração de caso — dados corretos por dificuldade', { skip }, () =>
       });
 
       it('pistas do vilão: uma por atributo do culpado, valores coerentes', async () => {
-        const { caseId, culprit, villainClues } = cases[d];
+        const { culprit, villainClues } = cases[d];
         assert.ok(villainClues.length >= 4 && villainClues.length <= 5);
         const [sex, hair, hobby, vehicle, feature] = await Promise.all([
           prisma.attrSex.findUnique({ where: { id: culprit.sexId } }),

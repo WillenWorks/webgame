@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
-import { v4 as uuid } from "uuid";
 import env from "../config/env.js";
-import { getProfileByUserId, createProfile, findProfileByName } from "../repositories/profile.repo.js";
+import { getProfileByUserId } from "../repositories/profile.repo.js";
 import { findUserById } from "../repositories/user.repo.js";
 
 // Auth middleware:
@@ -57,7 +56,7 @@ export async function authMiddleware(req, res, next) {
 
     // Demais rotas
     return next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ ok: false, message: "Token inválido ou expirado" });
   }
 }
