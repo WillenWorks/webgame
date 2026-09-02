@@ -49,7 +49,7 @@ export async function metricsController(req, res) {
   try {
     res.setHeader('Content-Type', 'text/plain');
     res.send(await renderMetrics());
-  } catch (err) {
+  } catch {
     res.status(500).send('metrics error');
   }
 }

@@ -141,7 +141,6 @@ export async function investigateService(caseId, cityPlaceId) {
   let clueType = place.clue_type;
   let targetType = "NONE";
   let targetValue = null;
-  let resolvedAttrValue = null;
   let targetRefId = null;
   let truth = null;
 
@@ -169,7 +168,6 @@ export async function investigateService(caseId, cityPlaceId) {
       clueType = "VILLAIN_ATTRIBUTE";
       targetType = "VILLAIN_ATTR";
       targetValue = picked.attribute_type;
-      resolvedAttrValue = picked.attribute_value;
       targetRefId = picked.target_ref_id;
       truth = {
         kind: "VILLAIN_ATTR",

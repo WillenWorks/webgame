@@ -79,6 +79,7 @@ export async function estimateTravelMinutes(fromCityId, toCityId, caseId = null 
     return classifyTravelMinutes({ sameCountry, isNeighbor, sameRegion, difficulty: diffLabel });
   } catch (e) {
     // 4) Fallback por distância com overheads por dificuldade
+    console.warn('[time] classificação por região falhou, usando distância:', String(e?.message || e));
     return fallbackTravelMinutes({ km, sameCountry, difficulty: diffLabel });
   }
 }

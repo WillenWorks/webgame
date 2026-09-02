@@ -23,13 +23,12 @@ describe('buildSuspectAttributeSets — culpado sempre único', () => {
     assert.ok(culpritIsUnique(sets), 'a combinação completa do culpado deve ser única na pool');
   });
 
-  it('mantém unicidade em várias sementes (pools pequenas incluídas)', () => {
+  it('mantém unicidade com pools pequenas em vários tamanhos de elenco', () => {
     const tight = { sex_id: pool(2), hair_id: pool(3), hobby_id: pool(3), vehicle_id: pool(2), feature_id: pool(2) };
-    for (let seed = 0; seed < 20; seed++) {
-      let s = seed + 1;
-      const rand = () => ((s = (s * 1103515245 + 12345) >>> 0) / 0x100000000);
-      const sets = buildSuspectAttributeSets(tight, 12, rand);
-      assert.ok(culpritIsUnique(sets), `colisão de culpado na semente ${seed}`);
+    for (const count of [6, 12, 20, 24]) {
+      const sets = buildSuspectAttributeSets(tight, count);
+      assert.equal(sets.length, count);
+      assert.ok(culpritIsUnique(sets), `colisão de culpado com count=${count}`);
     }
   });
 

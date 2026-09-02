@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { validateBody, validateParams, zId, zNum } from '../middlewares/validate.middleware.js';
+import { validateBody, validateParams, zId } from '../middlewares/validate.middleware.js';
 import { Router } from 'express';
 import { issueWarrantController } from "../controllers/warrant.controller.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";

@@ -77,7 +77,7 @@ export async function applyCaseResultToProfile(profileId, result) {
     casesFailedInc = 1;
   }
 
-  const { getPlayerReputation, insertPlayerReputationEntry } = await import('../repositories/player_reputation.repo.js');
+  const { getPlayerReputation } = await import('../repositories/player_reputation.repo.js');
   const currentRepRow = await getPlayerReputation(profileId);
   const currentRepScore = currentRepRow ? currentRepRow.reputation_score : ((profile.reputation_score || 0) || 0);
   const { redemptionDelta } = await import('./reputation.service.js');

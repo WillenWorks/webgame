@@ -16,7 +16,7 @@ export async function requireProfileMiddleware(req, res, next) {
     // injeta profileId para conveniência
     req.user.profileId = profile.id;
     next();
-  } catch (err) {
+  } catch {
     return res.status(500).json({ ok: false, message: "Erro ao validar perfil" });
   }
 }
