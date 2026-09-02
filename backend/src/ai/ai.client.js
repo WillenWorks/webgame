@@ -192,6 +192,9 @@ export async function callAI({ system, user, options = {} }) {
       console.warn(
         `[AI] ${providerName} falhou (tentativa ${attempt + 1}/${maxRetries + 1}): ${err.message}`,
       );
+      // Rate limit / cota: repetir na hora não adianta (a janela não abriu).
+      // Aborta o loop e deixa o chamador cair no fallback diegético.
+      if (/\b429\b|RESOURCE_EXHAUSTED|rate.?limit/i.test(err.message || '')) break;
     }
   }
 

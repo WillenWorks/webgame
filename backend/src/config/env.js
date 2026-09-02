@@ -11,7 +11,7 @@ export default {
   // Provedor ativo: "gemini" (padrão) ou "claude".
   AI_PROVIDER: (process.env.AI_PROVIDER || 'gemini').toLowerCase(),
   // Timeout global (ms) para qualquer chamada de IA.
-  AI_TIMEOUT: toInt(process.env.AI_TIMEOUT, 15000),
+  AI_TIMEOUT: toInt(process.env.AI_TIMEOUT, 10000),
   AI_MAX_RETRIES: toInt(process.env.AI_MAX_RETRIES, 1),
 
   // Cache determinístico de respostas de IA (economia de cota + latência zero
@@ -22,7 +22,7 @@ export default {
 
   // Google Gemini (@google/genai)
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-flash-lite-latest',
 
   // Anthropic Claude (@anthropic-ai/sdk)
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
