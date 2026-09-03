@@ -14,9 +14,15 @@
 // Todas as operações são upsert / find-or-create: rodar novamente não duplica.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const prisma = new PrismaClient();
+// Prisma 7: URL saiu do schema; o adapter lê process.env direto, então o seed
+// (subprocesso da CLI) precisa carregar o .env por conta própria.
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 // ── Regiões ──────────────────────────────────────────────────────────────────
 
