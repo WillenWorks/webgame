@@ -6,8 +6,12 @@ export default defineNuxtConfig({
     compatibilityDate: '2025-01-15',
     future: { compatibilityVersion: 3 },
     devtools: { enabled: true },
-    modules: ['@nuxtjs/tailwindcss'],
     css: ['~/assets/css/main.css'],
+    postcss: {
+        plugins: {
+            '@tailwindcss/postcss': {},
+        },
+    },
     ssr: false,
     app: {
         pageTransition: { name: 'page', mode: 'out-in' },

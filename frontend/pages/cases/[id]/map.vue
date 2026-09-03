@@ -349,9 +349,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.retro-btn-icon {
-  @apply w-9 h-9 flex items-center justify-center bg-slate-900 border border-cyan-500 text-cyan-400 hover:bg-cyan-500 hover:text-black transition-colors active:scale-95 text-lg;
-}
+/* .retro-btn-icon vive em assets/css/main.css (Tailwind 4 não resolve @apply
+   em <style scoped> sem @reference). */
 .custom-scrollbar::-webkit-scrollbar { width: 5px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }

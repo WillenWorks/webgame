@@ -13,7 +13,7 @@
             <input 
               v-model="form.username" 
               type="text" 
-              class="w-full bg-slate-900 border-2 border-slate-700 text-white p-3 font-mono focus:border-amber-500 focus:outline-none transition-colors"
+              class="w-full bg-slate-900 border-2 border-slate-700 text-white p-3 font-mono focus:border-amber-500 focus:outline-hidden transition-colors"
               placeholder="AGENTE_X"
               required
             />
@@ -24,7 +24,7 @@
             <input 
               v-model="form.password" 
               type="password" 
-              class="w-full bg-slate-900 border-2 border-slate-700 text-white p-3 font-mono focus:border-amber-500 focus:outline-none transition-colors"
+              class="w-full bg-slate-900 border-2 border-slate-700 text-white p-3 font-mono focus:border-amber-500 focus:outline-hidden transition-colors"
               placeholder="******"
               required
             />
@@ -56,7 +56,7 @@
         <input 
           v-model="form.email" 
           type="email" 
-          class="w-full bg-slate-900 border border-slate-700 text-white p-2 font-mono text-sm focus:border-cyan-500 focus:outline-none"
+          class="w-full bg-slate-900 border border-slate-700 text-white p-2 font-mono text-sm focus:border-cyan-500 focus:outline-hidden"
           placeholder="EMAIL INSTITUCIONAL"
         />
       </div>

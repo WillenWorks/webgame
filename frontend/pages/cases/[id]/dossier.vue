@@ -24,7 +24,7 @@
               <select 
                 v-model="filters[key]" 
                 @change="handleFilterChange"
-                class="bg-black border border-slate-700 text-amber-400 font-mono p-3 uppercase focus:border-amber-400 outline-none"
+                class="bg-black border border-slate-700 text-amber-400 font-mono p-3 uppercase focus:border-amber-400 outline-hidden"
               >
                 <option value="">(DESCONHECIDO)</option>
                 <option v-for="opt in options" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
