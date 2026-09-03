@@ -1,8 +1,14 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* @theme block converted to tailwind.config.js */
+/* Tema retrô CRT — antes em tailwind.config.js (theme.extend). */
+@theme {
+  --font-display: "Press Start 2P", system-ui, cursive;
+  --font-body: "VT323", monospace;
+  --font-mono: "Share Tech Mono", monospace;
+
+  --color-primary: #fbbf24;   /* amber-400 */
+  --color-secondary: #22d3ee; /* cyan-400 */
+}
 
 body {
   /* background-color: theme('colors.slate.950'); */
@@ -26,11 +32,16 @@ h1, h2, h3 {
 }
 
 .retro-btn:focus-visible {
-  @apply outline-none ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950;
+  @apply outline-hidden ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950;
 }
 
 .retro-btn:disabled {
   @apply opacity-50 cursor-not-allowed;
+}
+
+/* Botão de ícone (controles de zoom do mapa) — antes em <style scoped> de map.vue */
+.retro-btn-icon {
+  @apply w-9 h-9 flex items-center justify-center bg-slate-900 border border-cyan-500 text-cyan-400 hover:bg-cyan-500 hover:text-black transition-colors active:scale-95 text-lg;
 }
 
 /* Overlay de scanlines CRT reutilizável (antes duplicado por página) */

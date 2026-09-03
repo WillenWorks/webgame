@@ -12,7 +12,7 @@
           <p class="text-sm text-slate-400 font-mono">REGISTRO INCOMPLETO</p>
           <div class="p-4 bg-slate-800/50 border border-slate-700">
             <label class="block text-xs text-left mb-2 text-amber-500">NOME OPERACIONAL</label>
-            <input v-model="newAgentName" class="w-full bg-black border border-slate-600 p-2 text-white font-mono focus:border-amber-500 outline-none" placeholder="Ex: Agente Z" />
+            <input v-model="newAgentName" class="w-full bg-black border border-slate-600 p-2 text-white font-mono focus:border-amber-500 outline-hidden" placeholder="Ex: Agente Z" />
           </div>
           <RetroButton @click="handleCreateProfile" :disabled="!newAgentName">CRIAR PERFIL</RetroButton>
         </div>
