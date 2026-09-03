@@ -48,7 +48,7 @@ export function buildPrompt({ intent, archetype, reputation, difficulty = 1.0, c
   }
 
   // Regras de Reputação
-  let reputationRules = "";
+  let reputationRules;
   if (reputation === "ALTA") {
     reputationRules = "O NPC reconhece o detetive e é prestativo, admirado ou respeitoso. ('É uma honra ajudar a ACME!').";
   } else if (reputation === "BAIXA") {
