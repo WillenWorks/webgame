@@ -19,12 +19,12 @@ jobs:
           node-version: 24
       # Os DoS/ReDoS transitivos de Express/eslint/nuxt foram resolvidos via
       # `overrides` nos package.json; gate apertado de `critical` para `high`.
+      # O wrapper dá retry e passa-com-aviso se o endpoint de advisories do npm
+      # estiver fora (5xx) — vuln real ainda falha na hora.
       - name: npm audit (backend)
-        working-directory: backend
-        run: npm audit --audit-level=high
+        run: bash .github/scripts/npm-audit.sh backend --audit-level=high
       - name: npm audit (frontend)
-        working-directory: frontend
-        run: npm audit --audit-level=high
+        run: bash .github/scripts/npm-audit.sh frontend --audit-level=high
       - name: lockfile-lint
         run: |
           npx lockfile-lint --path backend/package-lock.json --type npm --validate-https --allowed-hosts npm
