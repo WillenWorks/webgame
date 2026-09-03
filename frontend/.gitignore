@@ -18,6 +18,13 @@ logs
 .fleet
 .idea
 
+# Playwright (mantém os *-snapshots/ versionados como baseline)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/tests/e2e/.seed.json
+
 # Local env files
 .env
 .env.*
