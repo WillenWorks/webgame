@@ -48,10 +48,11 @@ export async function visitCurrentCityService(caseId) {
       const rows = await getCitiesByIds(stepOptions.options);
       travelOptions = await Promise.all(
         rows.map(async (r) => {
-          let mins = 0;
+          let mins;
           try {
             mins = await estimateTravelMinutes(city.city_id, r.id, caseId);
-          } catch {
+          } catch (e) {
+            console.warn(`[visit] estimateTravelMinutes falhou (${city.city_id} -> ${r.id}), assumindo 0:`, String(e?.message || e));
             mins = 0;
           }
           const hours = Math.floor(mins / 60);

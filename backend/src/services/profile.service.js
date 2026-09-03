@@ -62,8 +62,8 @@ export async function applyCaseResultToProfile(profileId, result) {
   const profile = await findProfileById(profileId);
   if (!profile) throw new Error('Perfil não encontrado');
 
-  let xpGain = 0;
-  let reputationDelta = 0; // delta base, ajustado por política de redenção
+  let xpGain;
+  let reputationDelta; // delta base, ajustado por política de redenção
   let casesSolvedInc = 0;
   let casesFailedInc = 0;
 
