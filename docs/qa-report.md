@@ -4,6 +4,22 @@ Data: 2026-08-28 · Stack alvo: Prisma + PostgreSQL (working tree dos Agentes 1�
 
 ---
 
+> ⚠️ **DOCUMENTO HISTÓRICO (2026-08-28).** Os bloqueios descritos na seção
+> "Runner NÃO fecha 100%" foram **todos resolvidos** depois desta data:
+> - **Bloqueio 1 (migração Prisma incompleta / SQL cru MySQL nos services):**
+>   fechado pelo Agente 2.5 (Tasks 2.5.1–2.5.3, ver `docs/tasks.md`) — `grep`
+>   confirma zero ocorrências de `database.js`/`pool.query`/`mysql2` em
+>   `backend/src`.
+> - **Bloqueio 2 (adapter de IA sem curto-circuito quando falta chave):**
+>   fechado pelo Agente 3 (Task 3.1) — `AI_ENABLED=false` / ausência de chave
+>   curto-circuita o provedor e cai direto nos fallbacks diegéticos.
+>
+> Estado atual: `npm run e2e:all` passa nas três dificuldades e a suíte
+> (`npm test`) está 119/119 verde. Mantido apenas como registro do trabalho
+> do Agente 4. Fonte da verdade viva: `docs/game-design.md` e `docs/tasks.md`.
+
+---
+
 ## ✅ Entregue
 
 ### Task 4.1 — Runner E2E (`backend/tools/runner.js`)
