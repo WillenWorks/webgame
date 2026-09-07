@@ -3,8 +3,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0",
-    "@google/genai": "^2.19.0",
+    "@anthropic-ai/sdk": "^0.123.0",
+    "@google/genai": "^2.21.0",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "bcrypt": "6.0.0",
@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.9.1",
+    "eslint": "^10.10.0",
     "globals": "^17.11.0",
     "nodemon": "^3.1.14",
     "prisma": "7.10.0"
