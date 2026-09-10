@@ -1,6 +1,7 @@
 import { getCurrentRouteStep, getNextRouteCity, markRouteStepVisited, getStepOptions } from '../repositories/route.repo.js';
 import { getCaseById } from '../repositories/warrant.repo.js';
-import { countLocationClues } from '../repositories/travel.repo.js';
+import { countRevealedCluesInCity } from '../repositories/clue.repo.js';
+import { getCurrentCityByCase } from '../repositories/visit.repo.js';
 import { initTravelLogTable, insertTravelLog } from '../repositories/travel_log.repo.js';
 import { initCurrentViewTable, setCurrentView } from '../repositories/current_view.repo.js';
 import { getCaseDifficulty } from '../repositories/case.repo.js';
@@ -47,25 +48,35 @@ export async function travelService(caseId, destinationCityId) {
     throw new Error('Não há mais cidades para visitar neste caso');
   }
 
+  // Identifica a cidade atual real do jogador (pode ser a cidade da rota ou um decoy)
+  const currentCity = await getCurrentCityByCase(caseId);
+  const originCityId = currentCity ? currentCity.city_id : currentStep.city_id;
+
+  if (destinationCityId === originCityId) {
+    return { success: false, message: 'Você já se encontra nesta cidade.' };
+  }
+
   const optionsMeta = await getStepOptions(caseId, currentStep.step_order);
   if (!optionsMeta) {
-    await insertTravelLog({ id: uuid(), caseId, fromCityId: currentStep.city_id, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason: 'Viagem indisponível na fase final' });
+    await insertTravelLog({ id: uuid(), caseId, fromCityId: originCityId, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason: 'Viagem indisponível na fase final' });
     return { success: false, message: 'Viagem indisponível na fase final. Procure o vilão nas localidades.' };
   }
 
-  const locationClues = await countLocationClues(caseId, currentStep.city_id);
- 
-  if (locationClues < 1 && currentStep.step_order === 1) { 
-    const reason = 'Sem pista de localidade suficiente';
-    await insertTravelLog({ id: uuid(), caseId, fromCityId: currentStep.city_id, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason });
-    throw new Error('Você precisa de ao menos uma pista antes de viajar');
+  // Se o jogador estiver na cidade primária da rota, exige ao menos 1 pista antes de viajar (em qualquer fase)
+  if (originCityId === currentStep.city_id) {
+    const cluesInCity = await countRevealedCluesInCity(caseId, originCityId);
+    if (cluesInCity < 1) {
+      const reason = 'Sem pista de localidade suficiente';
+      await insertTravelLog({ id: uuid(), caseId, fromCityId: originCityId, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason });
+      throw new Error('Você precisa de ao menos uma pista antes de viajar');
+    }
   }
 
   const allowedOptions = Array.isArray(optionsMeta?.options) ? optionsMeta.options : [];
   const primaryCityId = optionsMeta?.primary ?? null;
   if (!allowedOptions.includes(destinationCityId)) {
     const reason = 'Destino fora das opções do step';
-    await insertTravelLog({ id: uuid(), caseId, fromCityId: currentStep.city_id, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason });
+    await insertTravelLog({ id: uuid(), caseId, fromCityId: originCityId, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason });
     return { success: false, message: 'Destino inválido para este passo. Siga as pistas disponíveis no mapa.' };
   }
 
@@ -81,7 +92,7 @@ export async function travelService(caseId, destinationCityId) {
   let randomFail = false;
   if (shouldFailTravelRandom(diffLabel)) {
     randomFail = true;
-    await insertTravelLog({ id: uuid(), caseId, fromCityId: currentStep.city_id, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason: 'Falha aleatória de viagem' });
+    await insertTravelLog({ id: uuid(), caseId, fromCityId: originCityId, toCityId: destinationCityId, stepOrder: currentStep.step_order, success: false, reason: 'Falha aleatória de viagem' });
   }
 
   if (!randomFail) {
@@ -94,7 +105,7 @@ export async function travelService(caseId, destinationCityId) {
     await insertTravelLog({
       id: uuid(),
       caseId,
-      fromCityId: currentStep.city_id,
+      fromCityId: originCityId,
       toCityId: destinationCityId,
       stepOrder: currentStep.step_order,
       success: isCorrect,
@@ -103,11 +114,10 @@ export async function travelService(caseId, destinationCityId) {
     });
   }
 
-  // Consome tempo da viagem. Numa falha aleatória o voo não acontece: você
-  // perde apenas parte do tempo (traslados, espera no aeroporto), não a viagem toda.
+  // Consome tempo da viagem a partir da cidade de origem real
   let failed = false;
   try {
-    const minutes = await estimateTravelMinutes(currentStep.city_id, destinationCityId, caseId);
+    const minutes = await estimateTravelMinutes(originCityId, destinationCityId, caseId);
     const spent = randomFail ? Math.ceil(minutes * 0.35) : minutes;
     const resultTime = await consumeActionTime({ caseId, minutes: spent, timezone: GAME_TIMEZONE });
     failed = resultTime.failed; // Verifica se estourou o prazo

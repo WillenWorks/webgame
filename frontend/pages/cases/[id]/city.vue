@@ -56,6 +56,20 @@
 
     </div>
 
+    <!-- Banner de Pista Falsa / Decoy -->
+    <div v-if="cityData?.isDecoy || route.query.wrongWay === '1'" class="bg-red-950/80 border-2 border-red-500 text-red-200 p-4 font-mono text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">⚠️</span>
+        <div>
+          <strong class="text-red-400 font-display uppercase tracking-wider block">ALERTA ACME: PISTA FALSA!</strong>
+          <span class="text-xs sm:text-sm">Você seguiu um rastro incorreto e perdeu tempo. Retorne ao mapa para tentar os outros destinos mapeados.</span>
+        </div>
+      </div>
+      <RetroButton variant="outline" class="shrink-0 text-xs text-red-300 border-red-500 hover:bg-red-900/50" @click="goToMap">
+        ABRIR MAPA
+      </RetroButton>
+    </div>
+
     <!-- Main Interaction Area (Places List) -->
     <div class="flex-1 min-h-0">
       <!-- Title changed from LOCAIS DE INTERESSE to LOCALIDADES -->

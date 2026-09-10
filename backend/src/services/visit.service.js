@@ -36,16 +36,30 @@ export async function visitCurrentCityService(caseId) {
 
   const timeState = await getCaseTimeSummary({ caseId });
 
-  // Opções de viagem: só depois de revelar ao menos 1 pista na cidade (passo 1);
-  // após um erro de rota o mapa fica visível para correção.
+  // Opções de viagem:
+  // - Se o jogador está num DECOY: o mapa permanece visível para permitir
+  //   escolher entre os outros destinos já colocados no mapa (excluindo o decoy atual).
+  // - Se o jogador está na cidade canônica do passo: exige ao menos 1 pista
+  //   revelada nesta cidade para liberar os destinos (em todos os passos).
   let travelOptions = [];
-  const cluesRevealed = await countRevealedCluesInCity(caseId, city.city_id);
-  const shouldShowMap = city.step_order !== 1 || cluesRevealed > 0;
+  const stepOptions = await getStepOptions(caseId, city.step_order);
+  const primaryCityId = stepOptions?.primary ?? null;
+  const isDecoy = Boolean(
+    stepOptions?.options?.includes(city.city_id) &&
+    city.city_id !== primaryCityId
+  );
 
-  if (shouldShowMap) {
-    const stepOptions = await getStepOptions(caseId, city.step_order);
-    if (stepOptions?.options?.length > 0) {
-      const rows = await getCitiesByIds(stepOptions.options);
+  const cluesRevealed = await countRevealedCluesInCity(caseId, city.city_id);
+  const shouldShowMap = isDecoy || cluesRevealed > 0;
+
+  if (shouldShowMap && stepOptions?.options?.length > 0) {
+    // Se estiver em um decoy, exclui a cidade atual das opções (não faz sentido voar para onde já está)
+    const candidateIds = isDecoy
+      ? stepOptions.options.filter((id) => id !== city.city_id)
+      : stepOptions.options;
+
+    if (candidateIds.length > 0) {
+      const rows = await getCitiesByIds(candidateIds);
       travelOptions = await Promise.all(
         rows.map(async (r) => {
           let mins;
@@ -88,5 +102,6 @@ export async function visitCurrentCityService(caseId) {
     timeState,
     cluesRevealed,
     travelOptions,
+    isDecoy: Boolean(isDecoy),
   };
 }

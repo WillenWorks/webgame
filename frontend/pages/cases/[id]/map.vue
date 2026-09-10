@@ -297,6 +297,14 @@ function confirmTravel() {
         })
         return
       }
+      if (res?.success === false) {
+        sfx.error()
+        router.push({
+          path: `/cases/${caseId}/city`,
+          query: { wrongWay: '1' },
+        })
+        return
+      }
       router.push(`/cases/${caseId}/city`)
     })
     .catch((err) => {
