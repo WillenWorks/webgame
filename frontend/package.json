@@ -20,15 +20,15 @@
     "axios": "1.20.0",
     "nuxt": "3.21.11",
     "topojson-client": "^3.1.0",
-    "vue": "^3.5.26",
+    "vue": "^3.5.43",
     "vue-router": "^4.6.4",
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^25.0.9",
-    "postcss": "8.5.26",
+    "postcss": "8.5.28",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "7.3.6"
