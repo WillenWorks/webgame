@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "axios": "1.20.0",
-    "nuxt": "3.21.11",
+    "nuxt": "4.5.2",
     "topojson-client": "^3.1.0",
     "vue": "^3.5.26",
     "vue-router": "^4.6.4",
